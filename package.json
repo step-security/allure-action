@@ -17,9 +17,6 @@
   },
   "scripts": {
     "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
-    "clean": "rm -rf dist",
-    "dev": "tsc --watch",
-    "package": "npm run clean && npm run build",
     "test": "allure run -- vitest run"
   },
   "dependencies": {
@@ -27,6 +24,7 @@
     "@actions/github": "^6.0.1",
     "@allurereport/core-api": "^3.0.1",
     "@allurereport/plugin-api": "^3.0.1",
+    "axios": "^1.13.4",
     "fast-glob": "^3.3.3"
   },
   "devDependencies": {
