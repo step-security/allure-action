@@ -12,7 +12,6 @@
     "outDir": "./dist",
     "skipLibCheck": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["test/**/*", "node_modules", "dist"],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+  "include": ["src/**/*", "test/**/*", "*.ts", "*.mjs", "*.cjs"],
+  "exclude": ["node_modules", "dist"]
 }

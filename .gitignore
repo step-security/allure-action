@@ -10,13 +10,6 @@
 !.yarn/sdks
 !.yarn/versions
 
-#IDEA Files
-.idea/*
-!.idea/vcs.xml
-!.idea/icon.png
-*.iml
-*.ipr
-
 #Eclipse files
 *.settings
 *.classpath
@@ -51,6 +44,3 @@ build
 .cursorrules
 .cursorignore
 .cursorindexingignore
-
-tsconfig.app*
-!tsconfig.app.json

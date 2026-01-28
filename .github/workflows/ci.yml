@@ -1,11 +1,7 @@
-name: Test
+name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
-  workflow_dispatch:
 
 permissions:
   pull-requests: write
@@ -15,28 +11,27 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: Unit tests
-    env:
-      ALLURE_SERVICE_ACCESS_TOKEN: ${{ secrets.ALLURE_SERVICE_ACCESS_TOKEN }}
+    name: Tests
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Deps installation
         run: npm ci
 
-      - name: Build TypeScript
+      - name: Bundle code
         run: npm run build
 
-      - name: Run tests
+      - name: Test
         run: npm test
         continue-on-error: true
 
-      - name: Run Allure Action
+      - name: Test Allure Action
         uses: ./
         with:
           report-directory: "./out/allure-report"

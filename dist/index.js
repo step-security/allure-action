@@ -63513,20 +63513,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createReportMarkdownSummary = exports.upsertPullRequestComment = exports.buildTestResultsList = exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = void 0;
+exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = exports.createReportMarkdownSummary = exports.upsertPullRequestComment = exports.buildTestResultsList = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const core_api_1 = __nccwpck_require__(2165);
-const retrieveActionInput = (name) => core.getInput(name, { required: false });
-exports.retrieveActionInput = retrieveActionInput;
-const fetchWorkflowContext = () => github.context;
-exports.fetchWorkflowContext = fetchWorkflowContext;
-const initializeGitHubClient = (token) => github.getOctokit(token);
-exports.initializeGitHubClient = initializeGitHubClient;
-const removeColorCodes = (text, replacementChar) => {
-    return text.replace(/\u001b\[\d+m/g, replacementChar ?? "");
-};
-exports.removeColorCodes = removeColorCodes;
 const buildTestResultsList = (testResults) => {
     const formattedLines = [];
     testResults.forEach((testItem) => {
@@ -63583,50 +63573,56 @@ const createReportMarkdownSummary = (reportSummaries) => {
         const pieChart = `<img src="${pieChartUrl}" width="28px" height="28px" />`;
         const reportName = reportData?.name ?? "Allure Report";
         const totalDuration = (0, core_api_1.formatDuration)(reportData?.duration ?? 0);
-        const statusBadges = [];
-        if (testStatistics.passed > 0) {
-            statusBadges.push(`<img alt="Passed tests" src="https://allurecharts.qameta.workers.dev/dot?type=passed&size=8" />&nbsp;<span>${testStatistics.passed}</span>`);
-        }
-        if (testStatistics.failed > 0) {
-            statusBadges.push(`<img alt="Failed tests" src="https://allurecharts.qameta.workers.dev/dot?type=failed&size=8" />&nbsp;<span>${testStatistics.failed}</span>`);
-        }
-        if (testStatistics.broken > 0) {
-            statusBadges.push(`<img alt="Broken tests" src="https://allurecharts.qameta.workers.dev/dot?type=broken&size=8" />&nbsp;<span>${testStatistics.broken}</span>`);
-        }
-        if (testStatistics.skipped > 0) {
-            statusBadges.push(`<img alt="Skipped tests" src="https://allurecharts.qameta.workers.dev/dot?type=skipped&size=8" />&nbsp;<span>${testStatistics.skipped}</span>`);
-        }
-        if (testStatistics.unknown > 0) {
-            statusBadges.push(`<img alt="Unknown tests" src="https://allurecharts.qameta.workers.dev/dot?type=unknown&size=8" />&nbsp;<span>${testStatistics.unknown}</span>`);
-        }
+        const generateStatusBadge = (type, count) => {
+            return `<img alt="${type.charAt(0).toUpperCase() + type.slice(1)} tests" src="https://allurecharts.qameta.workers.dev/dot?type=${type}&size=8" />&nbsp;<span>${count}</span>`;
+        };
+        const statusBadges = [
+            { type: "passed", count: testStatistics.passed },
+            { type: "failed", count: testStatistics.failed },
+            { type: "broken", count: testStatistics.broken },
+            { type: "skipped", count: testStatistics.skipped },
+            { type: "unknown", count: testStatistics.unknown },
+        ]
+            .filter((status) => status.count > 0)
+            .map((status) => generateStatusBadge(status.type, status.count));
         const newTestsCount = reportData?.newTests?.length ?? 0;
         const flakyTestsCount = reportData?.flakyTests?.length ?? 0;
         const retryTestsCount = reportData?.retryTests?.length ?? 0;
         const rowCells = [pieChart, reportName, totalDuration, statusBadges.join("&nbsp;&nbsp;&nbsp;")];
-        if (!reportData?.remoteHref) {
-            rowCells.push(newTestsCount.toString());
-            rowCells.push(flakyTestsCount.toString());
-            rowCells.push(retryTestsCount.toString());
-            rowCells.push("");
-        }
-        else {
-            rowCells.push(newTestsCount > 0
-                ? `<a href="${reportData.remoteHref}?filter=new" target="_blank">${newTestsCount}</a>`
-                : newTestsCount.toString());
-            rowCells.push(flakyTestsCount > 0
-                ? `<a href="${reportData.remoteHref}?filter=flaky" target="_blank">${flakyTestsCount}</a>`
-                : flakyTestsCount.toString());
-            rowCells.push(retryTestsCount > 0
-                ? `<a href="${reportData.remoteHref}?filter=retry" target="_blank">${retryTestsCount}</a>`
-                : retryTestsCount.toString());
-            rowCells.push(`<a href="${reportData.remoteHref}" target="_blank">View</a>`);
-        }
+        const generateTestCountCell = (count, filter, remoteHref) => {
+            if (!remoteHref)
+                return count.toString();
+            return count > 0
+                ? `<a href="${remoteHref}?filter=${filter}" target="_blank">${count}</a>`
+                : count.toString();
+        };
+        const testCounts = [
+            { count: newTestsCount, filter: "new" },
+            { count: flakyTestsCount, filter: "flaky" },
+            { count: retryTestsCount, filter: "retry" },
+        ];
+        testCounts.forEach((test) => {
+            rowCells.push(generateTestCountCell(test.count, test.filter, reportData?.remoteHref));
+        });
+        rowCells.push(reportData?.remoteHref
+            ? `<a href="${reportData.remoteHref}" target="_blank">View</a>`
+            : "");
         return `| ${rowCells.join(" | ")} |`;
     });
     const markdownLines = ["# Allure Report Summary", tableHeader, tableDivider, ...tableRows];
     return markdownLines.join("\n");
 };
 exports.createReportMarkdownSummary = createReportMarkdownSummary;
+const retrieveActionInput = (name) => core.getInput(name, { required: false });
+exports.retrieveActionInput = retrieveActionInput;
+const fetchWorkflowContext = () => github.context;
+exports.fetchWorkflowContext = fetchWorkflowContext;
+const initializeGitHubClient = (token) => github.getOctokit(token);
+exports.initializeGitHubClient = initializeGitHubClient;
+const removeColorCodes = (text, replacementChar) => {
+    return text.replace(/\u001b\[\d+m/g, replacementChar ?? "");
+};
+exports.removeColorCodes = removeColorCodes;
 
 
 /***/ }),

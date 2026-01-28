@@ -1,35 +1,38 @@
 import { defineConfig } from "allure";
 import { env } from "node:process";
 
-const { ALLURE_SERVICE_ACCESS_TOKEN } = env;
+// Configuration builder for Allure reporting
+const buildReportConfiguration = () => {
+  const serviceToken = env.ALLURE_SERVICE_ACCESS_TOKEN;
 
-/**
- * @typedef {import("allure").Config}
- */
-const config = {
-  output: "./out/allure-report",
-  plugins: {
-    awesome: {
-      options: {
-        singleFile: false,
-        reportLanguage: "en",
-        reportName: "Allure Action",
-        open: false,
-        publish: true,
+  const reportSettings = {
+    output: "./out/allure-report",
+    plugins: {
+      awesome: {
+        options: {
+          singleFile: false,
+          reportLanguage: "en",
+          reportName: "Allure Action",
+          open: false,
+          publish: true,
+        },
+      },
+      log: {
+        options: {
+          groupBy: "none",
+        },
       },
     },
-    log: {
-      options: {
-        groupBy: "none",
-      },
-    },
-  },
+  };
+
+  // Add service configuration when token is available
+  if (serviceToken) {
+    reportSettings.allureService = {
+      accessToken: serviceToken,
+    };
+  }
+
+  return reportSettings;
 };
 
-if (ALLURE_SERVICE_ACCESS_TOKEN) {
-  config.allureService = {
-    accessToken: ALLURE_SERVICE_ACCESS_TOKEN,
-  };
-}
-
-export default defineConfig(config);
+export default defineConfig(buildReportConfiguration());
