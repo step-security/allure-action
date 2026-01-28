@@ -1,0 +1,7 @@
+{
+  "extends": ["./tsconfig.json"],
+  "compilerOptions": {
+    "composite": true
+  },
+  "include": ["src/*", "test/*", "./vitest.config.ts", "./.eslintrc.cjs", "./allurerc.mjs", "./.prettierrc.js"]
+}

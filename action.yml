@@ -1,0 +1,20 @@
+name: "Allure Report Action"
+description: "Automatically posts comprehensive Allure test report summaries directly to your pull requests with visual indicators and quality gate validation"
+author: "noobie_doobie_doo"
+branding:
+  icon: "check-circle"
+  color: "green"
+
+inputs:
+  report-directory:
+    description: "Path to the directory containing generated Allure report data files (summary.json and quality-gate.json)"
+    required: false
+    default: "./allure-report"
+  github-token:
+    description: "GitHub authentication token used for posting comments to pull requests and creating check runs"
+    required: false
+    default: "${{ github.token }}"
+
+runs:
+  using: "node24"
+  main: "dist/index.js"
