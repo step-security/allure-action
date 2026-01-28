@@ -34,7 +34,7 @@ Add this action to your workflow after your test execution step:
     # Your test commands that generate Allure Report data
 
 - name: Post Allure Report Summary
-  uses: your-username/allure-report-action@v1
+  uses: step-security/allure-report-action@v1
   with:
     report-directory: "./allure-report"
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup test environment
         run: |
@@ -114,7 +114,7 @@ jobs:
           # Generate report command
 
       - name: Post Allure Summary
-        uses: your-username/allure-report-action@v1
+        uses: step-security/allure-report-action@v1
         with:
           report-directory: "./allure-report"
           github-token: ${{ secrets.GITHUB_TOKEN }}

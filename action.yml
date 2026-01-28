@@ -1,6 +1,6 @@
 name: "Allure Report Action"
 description: "Automatically posts comprehensive Allure test report summaries directly to your pull requests with visual indicators and quality gate validation"
-author: "noobie_doobie_doo"
+author: "step-security"
 branding:
   icon: "check-circle"
   color: "green"
