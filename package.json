@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "@actions/github": "^6.0.1",
+    "@actions/github": "^9.0.0",
     "@allurereport/core-api": "^3.0.1",
     "@allurereport/plugin-api": "^3.0.1",
     "axios": "^1.13.4",
