@@ -1,0 +1,7 @@
+[[IgnoredVulns]]
+id = "GHSA-g9mf-h72j-4rw9"
+reason = "Not exploitable - undici only used for trusted endpoints (GitHub API and StepSecurity API)"
+
+[[IgnoredVulns]]
+id = "GHSA-cf4h-3jhx-xvhq"
+reason = "Not exploitable - underscore is dev-only dependency, not bundled in production dist/index.js"
