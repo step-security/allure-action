@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  pull-requests: write
+  checks: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Deps installation
+        run: npm ci
+
+      - name: Bundle code
+        run: npm run build
+
+      - name: Test
+        run: npm test
+        continue-on-error: true
+
+      - name: Test Allure Action
+        uses: ./
+        with:
+          report-directory: "./out/allure-report"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
