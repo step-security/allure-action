@@ -33,6 +33,6 @@
     "allure": "^3.0.1",
     "allure-vitest": "^3.4.4",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.18"
   }
 }
