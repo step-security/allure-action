@@ -41348,7 +41348,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = exports.createReportMarkdownSummary = exports.upsertPullRequestComment = exports.buildTestResultsList = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const core_api_1 = __nccwpck_require__(2165);
+const core_api_1 = __nccwpck_require__(5565);
 const buildTestResultsList = (testResults) => {
     const formattedLines = [];
     testResults.forEach((testItem) => {
@@ -49191,7 +49191,7 @@ module.exports = axios;
 
 /***/ }),
 
-/***/ 2165:
+/***/ 5565:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -49202,15 +49202,25 @@ __nccwpck_require__.r(__webpack_exports__);
 __nccwpck_require__.d(__webpack_exports__, {
   CiType: () => (/* reexport */ CiType),
   DEFAULT_ENVIRONMENT: () => (/* reexport */ DEFAULT_ENVIRONMENT),
+  DEFAULT_ERROR_CATEGORIES: () => (/* reexport */ DEFAULT_ERROR_CATEGORIES),
+  EMPTY_VALUE: () => (/* reexport */ EMPTY_VALUE),
+  SEVERITY_ORDER: () => (/* reexport */ SEVERITY_ORDER),
+  STATUS_ORDER: () => (/* reexport */ STATUS_ORDER),
   StatusByPriority: () => (/* reexport */ StatusByPriority),
+  TRANSITION_ORDER: () => (/* reexport */ TRANSITION_ORDER),
   alphabetically: () => (/* reexport */ alphabetically),
   andThen: () => (/* reexport */ andThen),
+  buildEnvironmentSortOrder: () => (/* reexport */ buildEnvironmentSortOrder),
   byName: () => (/* reexport */ byName),
   byStatistic: () => (/* reexport */ byStatistic),
   byStatus: () => (/* reexport */ byStatus),
   capitalize: () => (/* reexport */ capitalize),
   compareBy: () => (/* reexport */ compareBy),
+  compareChildNodes: () => (/* reexport */ compareChildNodes),
+  compareNumbers: () => (/* reexport */ compareNumbers),
+  compareStrings: () => (/* reexport */ compareStrings),
   createBaseUrlScript: () => (/* reexport */ createBaseUrlScript),
+  createDictionary: () => (/* reexport */ createDictionary),
   createFaviconLinkTag: () => (/* reexport */ createFaviconLinkTag),
   createFontLinkTag: () => (/* reexport */ createFontLinkTag),
   createReportDataScript: () => (/* reexport */ createReportDataScript),
@@ -49218,21 +49228,28 @@ __nccwpck_require__.d(__webpack_exports__, {
   createStylesLinkTag: () => (/* reexport */ createStylesLinkTag),
   createTestPlan: () => (/* reexport */ createTestPlan),
   emptyStatistic: () => (/* reexport */ emptyStatistic),
+  extractErrorMatchingData: () => (/* reexport */ extractErrorMatchingData),
   filterByStatus: () => (/* reexport */ filterByStatus),
   filterIncludedInSuccessRate: () => (/* reexport */ filterIncludedInSuccessRate),
   filterSuccessful: () => (/* reexport */ filterSuccessful),
   filterUnsuccessful: () => (/* reexport */ filterUnsuccessful),
   findByLabelName: () => (/* reexport */ findByLabelName),
+  findLastByLabelName: () => (/* reexport */ findLastByLabelName),
   formatDuration: () => (/* reexport */ formatDuration),
+  getGroupSortKey: () => (/* reexport */ getGroupSortKey),
   getRealEnvsCount: () => (/* reexport */ getRealEnvsCount),
   getWorstStatus: () => (/* reexport */ getWorstStatus),
   htrsByTr: () => (/* reexport */ htrsByTr),
   includedInSuccessRate: () => (/* reexport */ includedInSuccessRate),
   incrementStatistic: () => (/* reexport */ incrementStatistic),
   isAttachment: () => (/* reexport */ isAttachment),
+  isMissingValue: () => (/* reexport */ isMissingValue),
   isStep: () => (/* reexport */ isStep),
+  matchCategory: () => (/* reexport */ matchCategory),
+  matchCategoryMatcher: () => (/* reexport */ matchCategoryMatcher),
   matchEnvironment: () => (/* reexport */ matchEnvironment),
   mergeStatistic: () => (/* reexport */ mergeStatistic),
+  normalizeCategoriesConfig: () => (/* reexport */ normalizeCategoriesConfig),
   notNull: () => (/* reexport */ notNull),
   nullsDefault: () => (/* reexport */ nullsDefault),
   nullsFirst: () => (/* reexport */ nullsFirst),
@@ -49345,6 +49362,327 @@ const createReportDataScript = (reportFiles = []) => {
   `;
 };
 
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/categories.js
+const EMPTY_VALUE = "<Empty>";
+const STATUS_ORDER = {
+    failed: 0,
+    broken: 1,
+    passed: 2,
+    skipped: 3,
+    unknown: 4,
+};
+const SEVERITY_ORDER = {
+    blocker: 0,
+    critical: 1,
+    normal: 2,
+    minor: 3,
+    trivial: 4,
+};
+const TRANSITION_ORDER = {
+    regressed: 0,
+    malfunctioned: 1,
+    new: 2,
+    fixed: 3,
+};
+const DEFAULT_ERROR_CATEGORIES = [
+    {
+        name: "Product errors",
+        matchers: { statuses: ["failed"] },
+    },
+    {
+        name: "Test errors",
+        matchers: { statuses: ["broken"] },
+    },
+];
+const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const toRegExp = (v) => (v instanceof RegExp ? v : new RegExp(v));
+const isMatcherArray = (value) => Array.isArray(value);
+const normalizeMatchers = (rule, index) => {
+    const compatKeysUsed = rule.matchedStatuses !== undefined ||
+        rule.messageRegex !== undefined ||
+        rule.traceRegex !== undefined ||
+        rule.flaky !== undefined;
+    if (rule.matchers !== undefined && compatKeysUsed) {
+        throw new Error(`categories[${index}] mixes canonical keys with compatibility keys`);
+    }
+    let matchers = [];
+    if (rule.matchers !== undefined) {
+        if (isMatcherArray(rule.matchers)) {
+            matchers = [...rule.matchers];
+        }
+        else {
+            matchers = [rule.matchers];
+        }
+    }
+    else if (compatKeysUsed) {
+        const compatMatcher = {};
+        if (rule.matchedStatuses) {
+            compatMatcher.statuses = rule.matchedStatuses;
+        }
+        if (rule.messageRegex !== undefined) {
+            compatMatcher.message = rule.messageRegex;
+        }
+        if (rule.traceRegex !== undefined) {
+            compatMatcher.trace = rule.traceRegex;
+        }
+        if (rule.flaky !== undefined) {
+            compatMatcher.flaky = rule.flaky;
+        }
+        matchers = [compatMatcher];
+    }
+    if (matchers.length === 0) {
+        throw new Error(`categories[${index}] must define matchers`);
+    }
+    for (let i = 0; i < matchers.length; i++) {
+        const m = matchers[i];
+        const ok = typeof m === "function" || isPlainObject(m);
+        if (!ok) {
+            throw new Error(`categories[${index}].matchers[${i}] must be object|function`);
+        }
+    }
+    return matchers;
+};
+const normalizeCategoriesConfig = (cfg) => {
+    if (cfg === false) {
+        return [];
+    }
+    const rawRules = Array.isArray(cfg) ? cfg : (cfg?.rules ?? []);
+    const rules = rawRules.length ? rawRules : [];
+    const normalized = [];
+    const seen = new Map();
+    const applyRule = (rule, index) => {
+        if (!isPlainObject(rule)) {
+            throw new Error(`categories[${index}] must be an object`);
+        }
+        if (typeof rule.name !== "string" || !rule.name.trim()) {
+            throw new Error(`categories[${index}].name must be non-empty string`);
+        }
+        const matchers = normalizeMatchers(rule, index);
+        const existing = seen.get(rule.name);
+        if (existing) {
+            existing.matchers.push(...matchers);
+            return;
+        }
+        const BUILT_IN_GROUP_SELECTORS = new Set([
+            "flaky",
+            "owner",
+            "severity",
+            "transition",
+            "status",
+            "environment",
+            "layer",
+        ]);
+        const groupBy = Array.isArray(rule.groupBy) ? [...rule.groupBy] : [];
+        for (const selector of groupBy) {
+            const isBuiltIn = typeof selector === "string" && BUILT_IN_GROUP_SELECTORS.has(selector);
+            const isCustom = isPlainObject(selector) &&
+                typeof selector.label === "string" &&
+                selector.label.trim().length > 0;
+            if (!isBuiltIn && !isCustom) {
+                throw new Error(`categories[${index}].groupBy contains invalid selector`);
+            }
+        }
+        const norm = {
+            name: rule.name,
+            matchers,
+            groupBy,
+            groupByMessage: rule.groupByMessage ?? true,
+            groupEnvironments: rule.groupEnvironments,
+            expand: rule.expand ?? false,
+            hide: rule.hide ?? false,
+            index,
+        };
+        seen.set(rule.name, norm);
+        normalized.push(norm);
+    };
+    rules.forEach(applyRule);
+    DEFAULT_ERROR_CATEGORIES.forEach((rule, index) => applyRule(rule, rules.length + index));
+    return normalized;
+};
+const matchObjectMatcher = (m, d) => {
+    if (m.statuses && !m.statuses.includes(d.status)) {
+        return false;
+    }
+    if (m.flaky !== undefined && m.flaky !== d.flaky) {
+        return false;
+    }
+    if (m.labels) {
+        for (const [labelName, expected] of Object.entries(m.labels)) {
+            const re = toRegExp(expected);
+            const values = d.labels.filter((l) => l.name === labelName).map((l) => l.value ?? "");
+            if (!values.some((v) => re.test(v))) {
+                return false;
+            }
+        }
+    }
+    if (m.message !== undefined) {
+        const re = toRegExp(m.message);
+        if (!re.test(d.message ?? "")) {
+            return false;
+        }
+    }
+    if (m.trace !== undefined) {
+        const re = toRegExp(m.trace);
+        if (!re.test(d.trace ?? "")) {
+            return false;
+        }
+    }
+    if (m.transitions && !m.transitions.includes(d.transition)) {
+        return false;
+    }
+    if (m.environments && !m.environments.includes(d.environment ?? EMPTY_VALUE)) {
+        return false;
+    }
+    return true;
+};
+const matchCategoryMatcher = (matcher, d) => {
+    if (typeof matcher === "function") {
+        return matcher(d);
+    }
+    if (isPlainObject(matcher)) {
+        return matchObjectMatcher(matcher, d);
+    }
+    return false;
+};
+const matchCategory = (categories, d) => {
+    for (const c of categories) {
+        if (c.matchers.some((m) => matchCategoryMatcher(m, d))) {
+            return c;
+        }
+    }
+    return undefined;
+};
+const extractErrorMatchingData = (tr) => {
+    const { message, trace } = tr.error ?? {};
+    const labels = Array.isArray(tr.labels)
+        ? tr.labels.map((l) => ({ name: l.name, value: l.value ?? "" }))
+        : [];
+    return {
+        status: tr.status,
+        labels,
+        message,
+        trace,
+        flaky: tr.flaky,
+        duration: tr.duration,
+        transition: tr.transition,
+        environment: tr.environment,
+    };
+};
+const buildEnvironmentSortOrder = (environmentNames, defaultEnvironmentName) => {
+    const orderMap = new Map();
+    for (let index = 0; index < environmentNames.length; index++) {
+        orderMap.set(environmentNames[index], index);
+    }
+    const missingEnvironmentRank = environmentNames.length;
+    const defaultEnvironmentRank = environmentNames.length + 1;
+    orderMap.set(EMPTY_VALUE, missingEnvironmentRank);
+    orderMap.set(defaultEnvironmentName, defaultEnvironmentRank);
+    return orderMap;
+};
+const compareNumbers = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
+const compareStrings = (left, right) => left.localeCompare(right);
+const isMissingValue = (value) => (value ?? EMPTY_VALUE) === EMPTY_VALUE;
+const getGroupSortKey = (groupKey, groupValue, environmentOrderMap) => {
+    const normalizedValue = groupValue ?? EMPTY_VALUE;
+    const missingRank = normalizedValue === EMPTY_VALUE ? 1 : 0;
+    if (groupKey === "status") {
+        const primaryRank = STATUS_ORDER[normalizedValue] ?? 999;
+        return { primaryRank, missingRank, alphaKey: normalizedValue };
+    }
+    if (groupKey === "severity") {
+        const primaryRank = SEVERITY_ORDER[normalizedValue] ?? 999;
+        return { primaryRank, missingRank, alphaKey: normalizedValue };
+    }
+    if (groupKey === "transition") {
+        const primaryRank = TRANSITION_ORDER[normalizedValue] ?? 999;
+        return { primaryRank, missingRank, alphaKey: normalizedValue };
+    }
+    if (groupKey === "flaky") {
+        const primaryRank = normalizedValue === "true" ? 0 : 1;
+        return { primaryRank, missingRank, alphaKey: normalizedValue };
+    }
+    if (groupKey === "environment") {
+        if (environmentOrderMap) {
+            const primaryRank = environmentOrderMap.get(normalizedValue) ?? 1000;
+            return { primaryRank, missingRank: 0, alphaKey: normalizedValue };
+        }
+        return { primaryRank: 0, missingRank, alphaKey: normalizedValue };
+    }
+    return { primaryRank: 0, missingRank, alphaKey: normalizedValue };
+};
+const compareChildNodes = (leftNodeId, rightNodeId, nodesById, environmentOrderMap) => {
+    const leftNode = nodesById[leftNodeId];
+    const rightNode = nodesById[rightNodeId];
+    const leftType = leftNode?.type ?? "";
+    const rightType = rightNode?.type ?? "";
+    if (leftType === "message" && rightType === "message") {
+        const leftTotal = leftNode.statistic?.total ?? 0;
+        const rightTotal = rightNode.statistic?.total ?? 0;
+        const byCountDescending = compareNumbers(rightTotal, leftTotal);
+        if (byCountDescending !== 0) {
+            return byCountDescending;
+        }
+        const byNameMessage = compareStrings(leftNode.name ?? "", rightNode.name ?? "");
+        if (byNameMessage !== 0) {
+            return byNameMessage;
+        }
+        return compareStrings(leftNodeId, rightNodeId);
+    }
+    if (leftType === "tr" && rightType === "tr") {
+        const leftKey = leftNode.key;
+        const rightKey = rightNode.key;
+        if (leftKey === "environment" && rightKey === "environment") {
+            const leftSortKey = getGroupSortKey("environment", leftNode.value, environmentOrderMap);
+            const rightSortKey = getGroupSortKey("environment", rightNode.value, environmentOrderMap);
+            const byPrimaryRank = compareNumbers(leftSortKey.primaryRank, rightSortKey.primaryRank);
+            if (byPrimaryRank !== 0) {
+                return byPrimaryRank;
+            }
+            const byMissingLast = compareNumbers(leftSortKey.missingRank, rightSortKey.missingRank);
+            if (byMissingLast !== 0) {
+                return byMissingLast;
+            }
+            const byAlpha = compareStrings(leftSortKey.alphaKey, rightSortKey.alphaKey);
+            if (byAlpha !== 0) {
+                return byAlpha;
+            }
+            return compareStrings(leftNodeId, rightNodeId);
+        }
+    }
+    if (leftType === "group" && rightType === "group") {
+        const leftGroupKey = leftNode.key ?? "";
+        const rightGroupKey = rightNode.key ?? "";
+        const byGroupKey = compareStrings(leftGroupKey, rightGroupKey);
+        if (byGroupKey !== 0) {
+            return byGroupKey;
+        }
+        const leftSortKey = getGroupSortKey(leftGroupKey, leftNode.value, environmentOrderMap);
+        const rightSortKey = getGroupSortKey(rightGroupKey, rightNode.value, environmentOrderMap);
+        const byPrimaryRank = compareNumbers(leftSortKey.primaryRank, rightSortKey.primaryRank);
+        if (byPrimaryRank !== 0) {
+            return byPrimaryRank;
+        }
+        const byMissingLast = compareNumbers(leftSortKey.missingRank, rightSortKey.missingRank);
+        if (byMissingLast !== 0) {
+            return byMissingLast;
+        }
+        const byAlpha = compareStrings(leftSortKey.alphaKey, rightSortKey.alphaKey);
+        if (byAlpha !== 0) {
+            return byAlpha;
+        }
+        return compareStrings(leftNodeId, rightNodeId);
+    }
+    const byType = compareStrings(leftType, rightType);
+    if (byType !== 0) {
+        return byType;
+    }
+    const byName = compareStrings(leftNode?.name ?? "", rightNode?.name ?? "");
+    if (byName !== 0) {
+        return byName;
+    }
+    return compareStrings(leftNodeId, rightNodeId);
+};
+
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/step.js
 const isStep = (result) => {
     return result.type === "step";
@@ -49453,6 +49791,14 @@ const notNull = (value) => !!value;
 const findByLabelName = (labels, name) => {
     return labels.find((label) => label.name === name)?.value;
 };
+const findLastByLabelName = (labels, name) => {
+    for (let i = labels.length - 1; i >= 0; i -= 1) {
+        if (labels[i].name === name) {
+            return labels[i].value;
+        }
+    }
+    return undefined;
+};
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/testplan.js
 
@@ -49530,7 +49876,12 @@ const capitalize = (str) => {
     return (str.charAt(0).toLocaleUpperCase() + str.slice(1));
 };
 
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/dictionary.js
+const createDictionary = () => Object.create(null);
+
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/index.js
+
+
 
 
 
