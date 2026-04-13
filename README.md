@@ -1,3 +1,5 @@
+[![StepSecurity Maintained Action](https://raw.githubusercontent.com/step-security/maintained-actions-assets/main/assets/maintained-action-banner.png)](https://docs.stepsecurity.io/actions/stepsecurity-maintained-actions)
+
 # Allure Report Action
 
 A GitHub Action that integrates Allure Report 3 directly into your pull request workflow by posting comprehensive test summaries as comments.
