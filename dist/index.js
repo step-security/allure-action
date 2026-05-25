@@ -70221,7 +70221,7 @@ exports.fetchWorkflowContext = fetchWorkflowContext;
 const initializeGitHubClient = (token) => github.getOctokit(token);
 exports.initializeGitHubClient = initializeGitHubClient;
 const removeColorCodes = (text, replacementChar) => {
-    return text.replace(/\[\d+m/g, replacementChar ?? "");
+    return text.replace(/\u001b\[\d+m/g, replacementChar ?? "");
 };
 exports.removeColorCodes = removeColorCodes;
 const hasQualityGateFailures = (content) => {

@@ -241,7 +241,7 @@ export const initializeGitHubClient = (token: string) => github.getOctokit(token
 // Remove ANSI color codes from strings
 export const removeColorCodes = (text: string, replacementChar?: string): string => {
   // eslint-disable-next-line no-control-regex
-  return text.replace(/\[\d+m/g, replacementChar ?? "");
+  return text.replace(/\u001b\[\d+m/g, replacementChar ?? "");
 };
 
 // ---------------------------------------------------------------------------
