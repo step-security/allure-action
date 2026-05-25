@@ -1,15 +1,24 @@
 import * as core from "@actions/core";
-import type { PluginSummary, QualityGateValidationResult } from "@allurereport/plugin-api";
+import type { PluginSummary } from "@allurereport/plugin-api";
 import fg from "fast-glob";
 import { existsSync, readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import axios, {isAxiosError} from 'axios';
 import {
+  type EnrichedReportSummary,
+  type QualityGateContent,
+  SECTION_COMMENT_MARKER_PREFIX,
+  assembleSectionComments,
   createReportMarkdownSummary,
+  deriveSummaryIdFromPath,
   fetchWorkflowContext,
+  formatQualityGateBody,
+  hasQualityGateFailures,
   initializeGitHubClient,
-  removeColorCodes,
+  parseEnabledSummarySections,
+  removeStaleMarkerComments,
+  resolvePerSummaryRemoteHref,
   retrieveActionInput,
   upsertPullRequestComment,
 } from "./helpers.js";
@@ -67,50 +76,56 @@ const executeAction = async (): Promise<void> => {
   const { eventName, repo, payload } = workflowContext;
 
   if (!githubToken) {
+    core.error("No GitHub token provided");
     return;
   }
 
   if (eventName !== "pull_request" || !payload.pull_request) {
+    core.info("Not a pull request event, skipping");
     return;
   }
 
   const reportsDirectory = retrieveActionInput("report-directory") || path.join(process.cwd(), "allure-report");
+  const staticRemoteHref = retrieveActionInput("remote-href") || undefined;
+  const enabledSections = parseEnabledSummarySections(retrieveActionInput("sections"));
   const qualityGateFilePath = path.join(reportsDirectory, "quality-gate.json");
   const discoveredSummaryFiles = await fg([path.join(reportsDirectory, "**", "summary.json")], {
     onlyFiles: true,
   });
 
-  const parsedSummaries = await Promise.all(
+  const enrichedSummaries = (await Promise.all(
     discoveredSummaryFiles.map(async (filePath) => {
       const fileContents = await fs.readFile(filePath, "utf-8");
+      const parsed = JSON.parse(fileContents) as PluginSummary;
 
-      return JSON.parse(fileContents) as PluginSummary;
+      return {
+        ...parsed,
+        summaryId: deriveSummaryIdFromPath(reportsDirectory, filePath),
+        remoteHref: resolvePerSummaryRemoteHref({
+          reportDir: reportsDirectory,
+          summaryFilePath: filePath,
+          inputRemoteHref: staticRemoteHref,
+          summaryRemoteHref: parsed.remoteHref,
+        }),
+      } as EnrichedReportSummary;
     }),
-  );
+  )) as EnrichedReportSummary[];
 
-  let qualityGateValidations: QualityGateValidationResult[] | undefined;
+  let qualityGateContent: QualityGateContent | undefined;
 
   if (existsSync(qualityGateFilePath)) {
-    const qualityGateContent = await fs.readFile(qualityGateFilePath, "utf-8");
+    const rawQualityGate = await fs.readFile(qualityGateFilePath, "utf-8");
 
     try {
-      qualityGateValidations = JSON.parse(qualityGateContent) as QualityGateValidationResult[];
+      qualityGateContent = JSON.parse(rawQualityGate) as QualityGateContent;
     } catch {}
   }
 
   const githubClient = initializeGitHubClient(githubToken);
 
-  if (qualityGateValidations) {
-    const failureMessages: string[] = [];
-    const hasQualityGateFailures = qualityGateValidations.length > 0;
-
-    qualityGateValidations.forEach((validationResult) => {
-      failureMessages.push(`**${validationResult.rule}** has failed:`);
-      failureMessages.push("```shell");
-      failureMessages.push(removeColorCodes(validationResult.message));
-      failureMessages.push("```");
-      failureMessages.push("");
-    });
+  if (qualityGateContent) {
+    core.info("Quality gate results found, checking status");
+    const failed = hasQualityGateFailures(qualityGateContent);
 
     githubClient.rest.checks.create({
       owner: repo.owner,
@@ -118,23 +133,30 @@ const executeAction = async (): Promise<void> => {
       name: "Allure Quality Gate",
       head_sha: payload.pull_request.head.sha,
       status: "completed",
-      conclusion: !hasQualityGateFailures ? "success" : "failure",
-      output: !hasQualityGateFailures
+      conclusion: !failed ? "success" : "failure",
+      output: !failed
         ? undefined
         : {
             title: "Quality Gate",
-            summary: failureMessages.join("\n"),
+            summary: formatQualityGateBody(qualityGateContent),
           },
     });
   }
 
-  if (!parsedSummaries?.length) {
+  if (!enrichedSummaries?.length) {
     core.info("No published reports found");
     return;
   }
 
-  const reportMarkdown = createReportMarkdownSummary(parsedSummaries);
   const pullRequestNumber = payload.pull_request.number;
+  const { data: existingComments } = await githubClient.rest.issues.listComments({
+    owner: repo.owner,
+    repo: repo.repo,
+    issue_number: pullRequestNumber,
+  });
+
+  const reportMarkdown = createReportMarkdownSummary(enrichedSummaries);
+  const sectionComments = assembleSectionComments(enrichedSummaries, enabledSections);
 
   await upsertPullRequestComment({
     octokit: githubClient,
@@ -143,6 +165,30 @@ const executeAction = async (): Promise<void> => {
     issue_number: pullRequestNumber,
     marker: "<!-- allure-report-summary -->",
     body: reportMarkdown,
+    existingComments,
+  });
+
+  await Promise.all(
+    sectionComments.map((comment) =>
+      upsertPullRequestComment({
+        octokit: githubClient,
+        owner: repo.owner,
+        repo: repo.repo,
+        issue_number: pullRequestNumber,
+        marker: comment.marker,
+        body: comment.body,
+        existingComments,
+      }),
+    ),
+  );
+
+  await removeStaleMarkerComments({
+    octokit: githubClient,
+    owner: repo.owner,
+    repo: repo.repo,
+    existingComments,
+    prefix: SECTION_COMMENT_MARKER_PREFIX,
+    keepMarkers: new Set(sectionComments.map((comment) => comment.marker)),
   });
 };
 

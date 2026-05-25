@@ -4,7 +4,18 @@ import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { type Mock, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeAction } from "../../src/main.js";
-import { fetchWorkflowContext, retrieveActionInput, initializeGitHubClient, removeColorCodes } from "../../src/helpers.js";
+import {
+  assembleSectionComments,
+  buildSectionCommentMarker,
+  fetchWorkflowContext,
+  formatQualityGateBody,
+  hasQualityGateFailures,
+  initializeGitHubClient,
+  parseEnabledSummarySections,
+  removeColorCodes,
+  resolvePerSummaryRemoteHref,
+  retrieveActionInput,
+} from "../../src/helpers.js";
 import { octokitMock } from "../mocks.js";
 
 vi.mock("fast-glob", () => ({
@@ -309,6 +320,126 @@ describe("Allure Report Action Tests", () => {
       const result = removeColorCodes(textWithColors, "*");
 
       expect(result).toBe("*Red*");
+    });
+  });
+
+  describe("Section input parsing", () => {
+    it("returns empty array when input is blank", () => {
+      expect(parseEnabledSummarySections("")).toEqual([]);
+    });
+
+    it("accepts comma-separated tokens with aliases", () => {
+      expect(parseEnabledSummarySections("new-tests, flaky")).toEqual(["new", "flaky"]);
+    });
+
+    it("accepts newline-separated tokens", () => {
+      expect(parseEnabledSummarySections("retry\nflaky")).toEqual(["flaky", "retry"]);
+    });
+
+    it("expands 'all' to every supported section in canonical order", () => {
+      expect(parseEnabledSummarySections("all")).toEqual(["new", "flaky", "retry"]);
+    });
+
+    it("ignores unknown tokens", () => {
+      expect(parseEnabledSummarySections("new, bogus, retry")).toEqual(["new", "retry"]);
+    });
+  });
+
+  describe("Quality gate format support", () => {
+    it("treats empty array as passing", () => {
+      expect(hasQualityGateFailures([])).toBe(false);
+    });
+
+    it("treats non-empty array as failing", () => {
+      expect(hasQualityGateFailures([{ rule: "r", message: "m" } as any])).toBe(true);
+    });
+
+    it("treats env-keyed object with no failures as passing", () => {
+      expect(hasQualityGateFailures({ prod: [], staging: [] } as any)).toBe(false);
+    });
+
+    it("treats env-keyed object with at least one failure as failing", () => {
+      expect(
+        hasQualityGateFailures({ prod: [], staging: [{ rule: "r", message: "m" } as any] }),
+      ).toBe(true);
+    });
+
+    it("renders env-keyed body with environment labels and separators", () => {
+      const body = formatQualityGateBody({
+        prod: [{ rule: "Failed", message: "boom" } as any],
+        staging: [{ rule: "Other", message: "ok" } as any],
+      });
+      expect(body).toContain('**Environment**: "prod"');
+      expect(body).toContain('**Environment**: "staging"');
+      expect(body).toContain("---");
+    });
+  });
+
+  describe("Static remote href resolution", () => {
+    it("returns summary remoteHref when no input override is provided", () => {
+      expect(
+        resolvePerSummaryRemoteHref({
+          reportDir: "/reports",
+          summaryFilePath: "/reports/a/summary.json",
+          summaryRemoteHref: "https://hosted.example/a",
+        }),
+      ).toBe("https://hosted.example/a");
+    });
+
+    it("returns input remoteHref unchanged when no index.html exists in the summary directory", () => {
+      (existsSync as unknown as Mock).mockReturnValue(false);
+      expect(
+        resolvePerSummaryRemoteHref({
+          reportDir: "/reports",
+          summaryFilePath: "/reports/a/summary.json",
+          inputRemoteHref: "https://hosted.example/reports",
+        }),
+      ).toBe("https://hosted.example/reports");
+    });
+
+    it("appends summary dir suffix when index.html exists in a nested summary directory", () => {
+      (existsSync as unknown as Mock).mockReturnValue(true);
+      expect(
+        resolvePerSummaryRemoteHref({
+          reportDir: "/reports",
+          summaryFilePath: "/reports/sub/dir/summary.json",
+          inputRemoteHref: "https://hosted.example/reports/",
+        }),
+      ).toBe("https://hosted.example/reports/sub/dir");
+    });
+  });
+
+  describe("Section comment assembly", () => {
+    it("emits no comments when no sections are requested", () => {
+      const summaries = [
+        {
+          summaryId: "report1/summary.json",
+          name: "Suite",
+          newTests: [{ id: "t1", name: "T1", status: "passed", duration: 1 } as any],
+          flakyTests: [],
+          retryTests: [],
+        } as any,
+      ];
+      expect(assembleSectionComments(summaries, [])).toEqual([]);
+    });
+
+    it("emits a section comment per (section, summary) pair when tests exist", () => {
+      const summaries = [
+        {
+          summaryId: "report1/summary.json",
+          name: "Suite A",
+          newTests: [{ id: "t1", name: "T1", status: "passed", duration: 1 } as any],
+          flakyTests: [],
+          retryTests: [{ id: "r1", name: "R1", status: "failed", duration: 2 } as any],
+        } as any,
+      ];
+      const result = assembleSectionComments(summaries, ["new", "flaky", "retry"]);
+      expect(result.map((c) => c.marker)).toEqual([
+        buildSectionCommentMarker("report1/summary.json", "new"),
+        buildSectionCommentMarker("report1/summary.json", "retry"),
+      ]);
+      expect(result[0].body).toContain("New Tests in Suite A");
+      expect(result[1].body).toContain("Retry Tests in Suite A");
     });
   });
 });

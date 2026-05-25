@@ -22,16 +22,16 @@
   "dependencies": {
     "@actions/core": "^2.0.1",
     "@actions/github": "^6.0.1",
-    "@allurereport/core-api": "^3.0.1",
-    "@allurereport/plugin-api": "^3.0.1",
-    "axios": "^1.13.4",
+    "@allurereport/core-api": "^3.8.2",
+    "@allurereport/plugin-api": "^3.8.2",
+    "axios": "^1.15.0",
     "fast-glob": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@vercel/ncc": "^0.38.4",
-    "allure": "^3.0.1",
-    "allure-vitest": "^3.4.4",
+    "allure": "^3.8.2",
+    "allure-vitest": "^3.8.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

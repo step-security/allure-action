@@ -49,7 +49,9 @@ Add this action to your workflow after your test execution step:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `report-directory` | Directory path containing Allure Report data | No | `./allure-report` |
+| `remote-href` | Base URL where the published Allure report is hosted (e.g. GitHub Pages). Used to render `View` links and per-summary links in the PR comment. | No | `""` |
 | `github-token` | GitHub token for PR comment operations | No | `${{ github.token }}` |
+| `sections` | Optional collapsible section comments to publish alongside the summary table. Supported values: `new`, `flaky`, `retry`, or `all`. Accepts comma- or newline-separated values. | No | `""` |
 
 ### Allure Configuration
 
