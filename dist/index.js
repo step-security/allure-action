@@ -70062,32 +70062,71 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = exports.createReportMarkdownSummary = exports.upsertPullRequestComment = exports.buildTestResultsList = void 0;
+exports.assembleSectionComments = exports.buildSectionCommentMarker = exports.parseEnabledSummarySections = exports.resolvePerSummaryRemoteHref = exports.deriveSummaryIdFromPath = exports.formatQualityGateBody = exports.hasQualityGateFailures = exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = exports.createReportMarkdownSummary = exports.removeStaleMarkerComments = exports.upsertPullRequestComment = exports.formatSingleTestEntry = exports.buildTestResultsList = exports.convertSeparatorsToForwardSlash = exports.buildExternalAnchor = exports.SECTION_COMMENT_MARKER_PREFIX = exports.SUPPORTED_SUMMARY_SECTIONS = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const core_api_1 = __nccwpck_require__(5565);
+const core_api_1 = __nccwpck_require__(6797);
+const path = __importStar(__nccwpck_require__(6760));
+const node_fs_1 = __nccwpck_require__(3024);
+exports.SUPPORTED_SUMMARY_SECTIONS = ["new", "flaky", "retry"];
+exports.SECTION_COMMENT_MARKER_PREFIX = "<!-- allure-report-section:";
+const SECTION_CONFIGURATIONS = {
+    new: { filter: "new", heading: "New Tests", testCollectionKey: "newTests" },
+    flaky: { filter: "flaky", heading: "Flaky Tests", testCollectionKey: "flakyTests" },
+    retry: { filter: "retry", heading: "Retry Tests", testCollectionKey: "retryTests" },
+};
+const SECTION_KEYWORD_ALIASES = {
+    "new": "new",
+    "new-tests": "new",
+    "flaky": "flaky",
+    "flaky-tests": "flaky",
+    "retry": "retry",
+    "retry-tests": "retry",
+};
+const DEFAULT_SECTION_COMMENT_BODY_LIMIT = 60_000;
+const escapeHtmlValue = (input) => {
+    return input
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+};
+const buildExternalAnchor = (href, label) => {
+    return `<a href="${escapeHtmlValue(href)}" target="_blank" rel="noopener noreferrer">${escapeHtmlValue(label)}</a>`;
+};
+exports.buildExternalAnchor = buildExternalAnchor;
+const convertSeparatorsToForwardSlash = (value) => {
+    return value.split(path.sep).join("/");
+};
+exports.convertSeparatorsToForwardSlash = convertSeparatorsToForwardSlash;
 const buildTestResultsList = (testResults) => {
     const formattedLines = [];
     testResults.forEach((testItem) => {
-        const iconUrl = `https://allurecharts.qameta.workers.dev/dot?type=${testItem.status}&size=8`;
-        const statusIndicator = `<img src="${iconUrl}" />`;
-        const statusLabel = `${statusIndicator} ${testItem.status}`;
-        const testLabel = testItem.remoteHref ? `[${testItem.name}](${testItem.remoteHref})` : testItem.name;
-        const testDuration = (0, core_api_1.formatDuration)(testItem.duration);
-        formattedLines.push(`- ${statusLabel} ${testLabel} (${testDuration})`);
+        formattedLines.push((0, exports.formatSingleTestEntry)(testItem));
     });
     return formattedLines.join("\n");
 };
 exports.buildTestResultsList = buildTestResultsList;
+const formatSingleTestEntry = (testItem) => {
+    const iconUrl = `https://allurecharts.qameta.workers.dev/dot?type=${testItem.status}&size=8`;
+    const statusIndicator = `<img src="${iconUrl}" />`;
+    const statusLabel = `${statusIndicator} ${testItem.status}`;
+    const testLabel = testItem.remoteHref ? (0, exports.buildExternalAnchor)(testItem.remoteHref, testItem.name) : testItem.name;
+    const testDuration = (0, core_api_1.formatDuration)(testItem.duration);
+    return `- ${statusLabel} ${testLabel} (${testDuration})`;
+};
+exports.formatSingleTestEntry = formatSingleTestEntry;
 const upsertPullRequestComment = async (config) => {
-    const { octokit, owner, repo, issue_number, marker, body } = config;
+    const { octokit, owner, repo, issue_number, marker, body, existingComments } = config;
     const fullCommentBody = `${marker}\n${body}`;
-    const { data: allComments } = await octokit.rest.issues.listComments({
-        owner,
-        repo,
-        issue_number,
-    });
-    const foundComment = allComments.find((comment) => comment.body?.includes(marker));
+    const commentsToInspect = existingComments ??
+        (await octokit.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number,
+        })).data;
+    const foundComment = commentsToInspect.find((comment) => comment.body?.includes(marker));
     if (foundComment) {
         await octokit.rest.issues.updateComment({
             owner,
@@ -70106,6 +70145,19 @@ const upsertPullRequestComment = async (config) => {
     }
 };
 exports.upsertPullRequestComment = upsertPullRequestComment;
+const removeStaleMarkerComments = async (config) => {
+    const { octokit, owner, repo, existingComments, prefix, keepMarkers = new Set() } = config;
+    const obsoleteComments = existingComments.filter((comment) => {
+        const firstLine = comment.body?.split("\n", 1)[0];
+        return Boolean(firstLine?.startsWith(prefix) && !keepMarkers.has(firstLine));
+    });
+    await Promise.all(obsoleteComments.map((comment) => octokit.rest.issues.deleteComment({
+        owner,
+        repo,
+        comment_id: comment.id,
+    })));
+};
+exports.removeStaleMarkerComments = removeStaleMarkerComments;
 const createReportMarkdownSummary = (reportSummaries) => {
     const tableHeader = `|  | Name | Duration | Stats | New | Flaky | Retry | Report |`;
     const tableDivider = `|-|-|-|-|-|-|-|-|`;
@@ -70142,7 +70194,7 @@ const createReportMarkdownSummary = (reportSummaries) => {
             if (!remoteHref)
                 return count.toString();
             return count > 0
-                ? `<a href="${remoteHref}?filter=${filter}" target="_blank">${count}</a>`
+                ? (0, exports.buildExternalAnchor)(`${remoteHref}?filter=${filter}`, count.toString())
                 : count.toString();
         };
         const testCounts = [
@@ -70154,7 +70206,7 @@ const createReportMarkdownSummary = (reportSummaries) => {
             rowCells.push(generateTestCountCell(test.count, test.filter, reportData?.remoteHref));
         });
         rowCells.push(reportData?.remoteHref
-            ? `<a href="${reportData.remoteHref}" target="_blank">View</a>`
+            ? (0, exports.buildExternalAnchor)(reportData.remoteHref, "View")
             : "");
         return `| ${rowCells.join(" | ")} |`;
     });
@@ -70172,6 +70224,172 @@ const removeColorCodes = (text, replacementChar) => {
     return text.replace(/\u001b\[\d+m/g, replacementChar ?? "");
 };
 exports.removeColorCodes = removeColorCodes;
+const hasQualityGateFailures = (content) => {
+    if (!content)
+        return false;
+    if (Array.isArray(content))
+        return content.length > 0;
+    return Object.values(content).flat().length > 0;
+};
+exports.hasQualityGateFailures = hasQualityGateFailures;
+const formatQualityGateRuleEntries = (results) => {
+    const lines = [];
+    results.forEach((result) => {
+        lines.push(`**${result.rule}** has failed:`);
+        lines.push("```shell");
+        lines.push((0, exports.removeColorCodes)(result.message));
+        lines.push("```");
+        lines.push("");
+    });
+    return lines.join("\n");
+};
+const formatQualityGateBody = (content) => {
+    if (Array.isArray(content)) {
+        return formatQualityGateRuleEntries(content);
+    }
+    const blocks = [];
+    Object.entries(content).forEach(([envName, results]) => {
+        blocks.push([`**Environment**: "${envName}"`, formatQualityGateRuleEntries(results)].join("\n"));
+    });
+    return blocks.join("\n\n---\n\n");
+};
+exports.formatQualityGateBody = formatQualityGateBody;
+const deriveSummaryIdFromPath = (reportDir, summaryFilePath) => {
+    const absoluteReportDir = path.resolve(reportDir);
+    const absoluteSummaryFile = path.resolve(summaryFilePath);
+    if (absoluteSummaryFile.startsWith(`${absoluteReportDir}${path.sep}`)) {
+        return (0, exports.convertSeparatorsToForwardSlash)(path.relative(absoluteReportDir, absoluteSummaryFile));
+    }
+    return (0, exports.convertSeparatorsToForwardSlash)(path.normalize(summaryFilePath));
+};
+exports.deriveSummaryIdFromPath = deriveSummaryIdFromPath;
+const deriveSummaryDirSuffix = (reportDir, summaryFilePath) => {
+    const summaryDir = path.dirname(summaryFilePath);
+    const normalizedReport = path.normalize(reportDir);
+    const normalizedSummary = path.normalize(summaryDir);
+    const absoluteReport = path.resolve(reportDir);
+    const absoluteSummary = path.resolve(summaryDir);
+    const candidates = [
+        { base: normalizedReport, target: normalizedSummary },
+        { base: absoluteReport, target: absoluteSummary },
+    ];
+    for (const { base, target } of candidates) {
+        if (target === base)
+            return "";
+        if (target.startsWith(`${base}${path.sep}`)) {
+            return (0, exports.convertSeparatorsToForwardSlash)(path.relative(base, target));
+        }
+    }
+    if (normalizedSummary === ".")
+        return "";
+    return (0, exports.convertSeparatorsToForwardSlash)(normalizedSummary);
+};
+const resolvePerSummaryRemoteHref = (params) => {
+    const { reportDir, summaryFilePath, inputRemoteHref, summaryRemoteHref } = params;
+    if (!inputRemoteHref)
+        return summaryRemoteHref;
+    const summaryDir = path.dirname(summaryFilePath);
+    const indexHtmlPath = path.join(summaryDir, "index.html");
+    if (!(0, node_fs_1.existsSync)(indexHtmlPath))
+        return inputRemoteHref;
+    const dirSuffix = deriveSummaryDirSuffix(reportDir, summaryFilePath);
+    if (!dirSuffix)
+        return inputRemoteHref;
+    return `${inputRemoteHref.replace(/\/$/, "")}/${dirSuffix}`;
+};
+exports.resolvePerSummaryRemoteHref = resolvePerSummaryRemoteHref;
+const normalizeSectionKeyword = (raw) => {
+    return raw
+        .trim()
+        .toLowerCase()
+        .replace(/^[\s[\]"']+|[\s\]"']+$/g, "");
+};
+const parseEnabledSummarySections = (rawValue) => {
+    const normalizedTokens = rawValue.split(/[\n,]/).map(normalizeSectionKeyword).filter(Boolean);
+    if (normalizedTokens.includes("all")) {
+        return [...exports.SUPPORTED_SUMMARY_SECTIONS];
+    }
+    const requested = new Set(normalizedTokens
+        .map((token) => SECTION_KEYWORD_ALIASES[token])
+        .filter((section) => Boolean(section)));
+    return exports.SUPPORTED_SUMMARY_SECTIONS.filter((section) => requested.has(section));
+};
+exports.parseEnabledSummarySections = parseEnabledSummarySections;
+const buildSectionCommentMarker = (summaryId, section) => {
+    return `${exports.SECTION_COMMENT_MARKER_PREFIX}${section}:${summaryId} -->`;
+};
+exports.buildSectionCommentMarker = buildSectionCommentMarker;
+const readWithTestResultsLinksFlag = (summary) => {
+    const meta = summary.meta;
+    return Boolean(meta?.withTestResultsLinks);
+};
+const buildPerTestRemoteHref = (summary, testId) => {
+    if (!summary.remoteHref || !readWithTestResultsLinksFlag(summary))
+        return undefined;
+    return `${summary.remoteHref}#${testId}`;
+};
+const collectSectionTestEntries = (summary, section) => {
+    const definition = SECTION_CONFIGURATIONS[section];
+    const tests = summary[definition.testCollectionKey] ?? [];
+    return tests.map((test) => ({
+        ...test,
+        remoteHref: buildPerTestRemoteHref(summary, test.id),
+    }));
+};
+const buildSectionFilterHref = (summary, section) => {
+    if (!summary.remoteHref)
+        return undefined;
+    return `${summary.remoteHref}?filter=${SECTION_CONFIGURATIONS[section].filter}`;
+};
+const formatSectionToggleLabel = (section, count) => {
+    const noun = count === 1 ? "test" : "tests";
+    return `Show ${count} ${section} ${noun}`;
+};
+const renderSectionBody = (titleLine, toggleLine, contentLines) => {
+    return [titleLine, "", "<details>", `<summary>${toggleLine}</summary>`, "", ...contentLines, "</details>"].join("\n");
+};
+const buildTruncationTail = (summary, section) => {
+    const moreHref = buildSectionFilterHref(summary, section);
+    if (!moreHref)
+        return ["", "_List truncated due to comment size limit._", ""];
+    return ["", (0, exports.buildExternalAnchor)(moreHref, "More"), ""];
+};
+const buildSectionCommentBody = (summary, section, options = {}) => {
+    const { bodyCharLimit = DEFAULT_SECTION_COMMENT_BODY_LIMIT } = options;
+    const testEntries = collectSectionTestEntries(summary, section);
+    if (!testEntries.length)
+        return undefined;
+    const titleLine = `### ${SECTION_CONFIGURATIONS[section].heading} in ${summary?.name ?? "Allure Report"}`;
+    const toggleLine = formatSectionToggleLabel(section, testEntries.length);
+    const renderedTestLines = testEntries.map((test) => (0, exports.formatSingleTestEntry)(test));
+    const fullBody = renderSectionBody(titleLine, toggleLine, [...renderedTestLines, ""]);
+    if (fullBody.length <= bodyCharLimit)
+        return fullBody;
+    const truncationTail = buildTruncationTail(summary, section);
+    const retainedLines = [];
+    renderedTestLines.forEach((line) => {
+        const probe = renderSectionBody(titleLine, toggleLine, [...retainedLines, line, ...truncationTail]);
+        if (probe.length <= bodyCharLimit)
+            retainedLines.push(line);
+    });
+    return renderSectionBody(titleLine, toggleLine, [...retainedLines, ...truncationTail]);
+};
+const assembleSectionComments = (summaries, sections, options = {}) => {
+    const output = [];
+    sections.forEach((section) => {
+        summaries.forEach((summary) => {
+            const body = buildSectionCommentBody(summary, section, options);
+            if (!body)
+                return;
+            output.push({
+                marker: (0, exports.buildSectionCommentMarker)(summary.summaryId, section),
+                body,
+            });
+        });
+    });
+    return output;
+};
+exports.assembleSectionComments = assembleSectionComments;
 
 
 /***/ }),
@@ -70267,60 +70485,73 @@ const executeAction = async () => {
     const workflowContext = (0, helpers_js_1.fetchWorkflowContext)();
     const { eventName, repo, payload } = workflowContext;
     if (!githubToken) {
+        core.error("No GitHub token provided");
         return;
     }
     if (eventName !== "pull_request" || !payload.pull_request) {
+        core.info("Not a pull request event, skipping");
         return;
     }
     const reportsDirectory = (0, helpers_js_1.retrieveActionInput)("report-directory") || path.join(process.cwd(), "allure-report");
+    const staticRemoteHref = (0, helpers_js_1.retrieveActionInput)("remote-href") || undefined;
+    const enabledSections = (0, helpers_js_1.parseEnabledSummarySections)((0, helpers_js_1.retrieveActionInput)("sections"));
     const qualityGateFilePath = path.join(reportsDirectory, "quality-gate.json");
     const discoveredSummaryFiles = await (0, fast_glob_1.default)([path.join(reportsDirectory, "**", "summary.json")], {
         onlyFiles: true,
     });
-    const parsedSummaries = await Promise.all(discoveredSummaryFiles.map(async (filePath) => {
+    const enrichedSummaries = (await Promise.all(discoveredSummaryFiles.map(async (filePath) => {
         const fileContents = await fs.readFile(filePath, "utf-8");
-        return JSON.parse(fileContents);
-    }));
-    let qualityGateValidations;
+        const parsed = JSON.parse(fileContents);
+        return {
+            ...parsed,
+            summaryId: (0, helpers_js_1.deriveSummaryIdFromPath)(reportsDirectory, filePath),
+            remoteHref: (0, helpers_js_1.resolvePerSummaryRemoteHref)({
+                reportDir: reportsDirectory,
+                summaryFilePath: filePath,
+                inputRemoteHref: staticRemoteHref,
+                summaryRemoteHref: parsed.remoteHref,
+            }),
+        };
+    })));
+    let qualityGateContent;
     if ((0, node_fs_1.existsSync)(qualityGateFilePath)) {
-        const qualityGateContent = await fs.readFile(qualityGateFilePath, "utf-8");
+        const rawQualityGate = await fs.readFile(qualityGateFilePath, "utf-8");
         try {
-            qualityGateValidations = JSON.parse(qualityGateContent);
+            qualityGateContent = JSON.parse(rawQualityGate);
         }
         catch { }
     }
     const githubClient = (0, helpers_js_1.initializeGitHubClient)(githubToken);
-    if (qualityGateValidations) {
-        const failureMessages = [];
-        const hasQualityGateFailures = qualityGateValidations.length > 0;
-        qualityGateValidations.forEach((validationResult) => {
-            failureMessages.push(`**${validationResult.rule}** has failed:`);
-            failureMessages.push("```shell");
-            failureMessages.push((0, helpers_js_1.removeColorCodes)(validationResult.message));
-            failureMessages.push("```");
-            failureMessages.push("");
-        });
+    if (qualityGateContent) {
+        core.info("Quality gate results found, checking status");
+        const failed = (0, helpers_js_1.hasQualityGateFailures)(qualityGateContent);
         githubClient.rest.checks.create({
             owner: repo.owner,
             repo: repo.repo,
             name: "Allure Quality Gate",
             head_sha: payload.pull_request.head.sha,
             status: "completed",
-            conclusion: !hasQualityGateFailures ? "success" : "failure",
-            output: !hasQualityGateFailures
+            conclusion: !failed ? "success" : "failure",
+            output: !failed
                 ? undefined
                 : {
                     title: "Quality Gate",
-                    summary: failureMessages.join("\n"),
+                    summary: (0, helpers_js_1.formatQualityGateBody)(qualityGateContent),
                 },
         });
     }
-    if (!parsedSummaries?.length) {
+    if (!enrichedSummaries?.length) {
         core.info("No published reports found");
         return;
     }
-    const reportMarkdown = (0, helpers_js_1.createReportMarkdownSummary)(parsedSummaries);
     const pullRequestNumber = payload.pull_request.number;
+    const { data: existingComments } = await githubClient.rest.issues.listComments({
+        owner: repo.owner,
+        repo: repo.repo,
+        issue_number: pullRequestNumber,
+    });
+    const reportMarkdown = (0, helpers_js_1.createReportMarkdownSummary)(enrichedSummaries);
+    const sectionComments = (0, helpers_js_1.assembleSectionComments)(enrichedSummaries, enabledSections);
     await (0, helpers_js_1.upsertPullRequestComment)({
         octokit: githubClient,
         owner: repo.owner,
@@ -70328,6 +70559,24 @@ const executeAction = async () => {
         issue_number: pullRequestNumber,
         marker: "<!-- allure-report-summary -->",
         body: reportMarkdown,
+        existingComments,
+    });
+    await Promise.all(sectionComments.map((comment) => (0, helpers_js_1.upsertPullRequestComment)({
+        octokit: githubClient,
+        owner: repo.owner,
+        repo: repo.repo,
+        issue_number: pullRequestNumber,
+        marker: comment.marker,
+        body: comment.body,
+        existingComments,
+    })));
+    await (0, helpers_js_1.removeStaleMarkerComments)({
+        octokit: githubClient,
+        owner: repo.owner,
+        repo: repo.repo,
+        existingComments,
+        prefix: helpers_js_1.SECTION_COMMENT_MARKER_PREFIX,
+        keepMarkers: new Set(sectionComments.map((comment) => comment.marker)),
     });
 };
 exports.executeAction = executeAction;
@@ -78089,7 +78338,7 @@ module.exports = axios;
 
 /***/ }),
 
-/***/ 5565:
+/***/ 6797:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -78100,14 +78349,19 @@ __nccwpck_require__.r(__webpack_exports__);
 __nccwpck_require__.d(__webpack_exports__, {
   CiType: () => (/* reexport */ CiType),
   DEFAULT_ENVIRONMENT: () => (/* reexport */ DEFAULT_ENVIRONMENT),
+  DEFAULT_ENVIRONMENT_IDENTITY: () => (/* reexport */ DEFAULT_ENVIRONMENT_IDENTITY),
   DEFAULT_ERROR_CATEGORIES: () => (/* reexport */ DEFAULT_ERROR_CATEGORIES),
+  DEFAULT_ERROR_CATEGORY_IDS: () => (/* reexport */ DEFAULT_ERROR_CATEGORY_IDS),
   EMPTY_VALUE: () => (/* reexport */ EMPTY_VALUE),
+  MAX_ENVIRONMENT_ID_LENGTH: () => (/* reexport */ MAX_ENVIRONMENT_ID_LENGTH),
+  MAX_ENVIRONMENT_NAME_LENGTH: () => (/* reexport */ MAX_ENVIRONMENT_NAME_LENGTH),
   SEVERITY_ORDER: () => (/* reexport */ SEVERITY_ORDER),
   STATUS_ORDER: () => (/* reexport */ STATUS_ORDER),
   StatusByPriority: () => (/* reexport */ StatusByPriority),
   TRANSITION_ORDER: () => (/* reexport */ TRANSITION_ORDER),
   alphabetically: () => (/* reexport */ alphabetically),
   andThen: () => (/* reexport */ andThen),
+  assertValidEnvironmentName: () => (/* reexport */ assertValidEnvironmentName),
   buildEnvironmentSortOrder: () => (/* reexport */ buildEnvironmentSortOrder),
   byName: () => (/* reexport */ byName),
   byStatistic: () => (/* reexport */ byStatistic),
@@ -78127,14 +78381,19 @@ __nccwpck_require__.d(__webpack_exports__, {
   createTestPlan: () => (/* reexport */ createTestPlan),
   emptyStatistic: () => (/* reexport */ emptyStatistic),
   extractErrorMatchingData: () => (/* reexport */ extractErrorMatchingData),
+  fallbackTestCaseIdLabelName: () => (/* reexport */ fallbackTestCaseIdLabelName),
   filterByStatus: () => (/* reexport */ filterByStatus),
   filterIncludedInSuccessRate: () => (/* reexport */ filterIncludedInSuccessRate),
   filterSuccessful: () => (/* reexport */ filterSuccessful),
+  filterUnknownByKnownIssues: () => (/* reexport */ filterUnknownByKnownIssues),
   filterUnsuccessful: () => (/* reexport */ filterUnsuccessful),
   findByLabelName: () => (/* reexport */ findByLabelName),
   findLastByLabelName: () => (/* reexport */ findLastByLabelName),
   formatDuration: () => (/* reexport */ formatDuration),
+  formatNormalizedEnvironmentCollision: () => (/* reexport */ formatNormalizedEnvironmentCollision),
+  getFallbackHistoryId: () => (/* reexport */ getFallbackHistoryId),
   getGroupSortKey: () => (/* reexport */ getGroupSortKey),
+  getHistoryIdCandidates: () => (/* reexport */ getHistoryIdCandidates),
   getRealEnvsCount: () => (/* reexport */ getRealEnvsCount),
   getWorstStatus: () => (/* reexport */ getWorstStatus),
   htrsByTr: () => (/* reexport */ htrsByTr),
@@ -78143,29 +78402,40 @@ __nccwpck_require__.d(__webpack_exports__, {
   isAttachment: () => (/* reexport */ isAttachment),
   isMissingValue: () => (/* reexport */ isMissingValue),
   isStep: () => (/* reexport */ isStep),
+  joinPosixPath: () => (/* reexport */ joinPosixPath),
   matchCategory: () => (/* reexport */ matchCategory),
   matchCategoryMatcher: () => (/* reexport */ matchCategoryMatcher),
-  matchEnvironment: () => (/* reexport */ matchEnvironment),
   mergeStatistic: () => (/* reexport */ mergeStatistic),
   normalizeCategoriesConfig: () => (/* reexport */ normalizeCategoriesConfig),
+  normalizeHistoryDataPoint: () => (/* reexport */ normalizeHistoryDataPoint),
+  normalizeHistoryDataPointUrls: () => (/* reexport */ normalizeHistoryDataPointUrls),
   notNull: () => (/* reexport */ notNull),
   nullsDefault: () => (/* reexport */ nullsDefault),
   nullsFirst: () => (/* reexport */ nullsFirst),
   nullsLast: () => (/* reexport */ nullsLast),
   ordinal: () => (/* reexport */ ordinal),
   reverse: () => (/* reexport */ reverse),
+  sanitizeExternalUrl: () => (/* reexport */ sanitizeExternalUrl),
+  selectHistoryTestResults: () => (/* reexport */ selectHistoryTestResults),
   severityLabelName: () => (/* reexport */ severityLabelName),
   severityLevels: () => (/* reexport */ severityLevels),
+  shouldHideLabel: () => (/* reexport */ shouldHideLabel),
   statusToPriority: () => (/* reexport */ statusToPriority),
   statusesList: () => (/* reexport */ statusesList),
+  stringifyForInlineScript: () => (/* reexport */ stringifyForInlineScript),
+  stringifyHistoryParams: () => (/* reexport */ stringifyHistoryParams),
   successfulStatuses: () => (/* reexport */ successfulStatuses),
-  unsuccessfulStatuses: () => (/* reexport */ unsuccessfulStatuses)
+  toPosixPath: () => (/* reexport */ toPosixPath),
+  unsuccessfulStatuses: () => (/* reexport */ unsuccessfulStatuses),
+  validateEnvironmentId: () => (/* reexport */ validateEnvironmentId),
+  validateEnvironmentName: () => (/* reexport */ validateEnvironmentName)
 });
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/constants.js
 const statusesList = ["failed", "broken", "passed", "skipped", "unknown"];
 const severityLevels = ["blocker", "critical", "normal", "minor", "trivial"];
 const severityLabelName = "severity";
+const fallbackTestCaseIdLabelName = "_fallbackTestCaseId";
 const unsuccessfulStatuses = new Set(["failed", "broken"]);
 const successfulStatuses = new Set(["passed"]);
 const includedInSuccessRate = new Set([...unsuccessfulStatuses, ...successfulStatuses]);
@@ -78229,6 +78499,14 @@ const createBaseUrlScript = () => {
     </script>
   `;
 };
+const stringifyForInlineScript = (value) => {
+    return JSON.stringify(value)
+        .replaceAll("<", "\\u003C")
+        .replaceAll(">", "\\u003E")
+        .replaceAll("&", "\\u0026")
+        .replaceAll("\u2028", "\\u2028")
+        .replaceAll("\u2029", "\\u2029");
+};
 const createReportDataScript = (reportFiles = []) => {
     if (!reportFiles?.length) {
         return `
@@ -78237,7 +78515,9 @@ const createReportDataScript = (reportFiles = []) => {
       </script>
     `;
     }
-    const reportFilesDeclaration = reportFiles.map(({ name, value }) => `d('${name}','${value}')`).join(",");
+    const reportFilesDeclaration = reportFiles
+        .map(({ name, value }) => `d(${JSON.stringify(name)},${JSON.stringify(value)})`)
+        .join(",");
     return `
     <script async>
       window.allureReportDataReady = false;
@@ -78282,12 +78562,18 @@ const TRANSITION_ORDER = {
     new: 2,
     fixed: 3,
 };
+const DEFAULT_ERROR_CATEGORY_IDS = {
+    productErrors: "_product_errors_default_category",
+    testErrors: "_test_errors_default_category",
+};
 const DEFAULT_ERROR_CATEGORIES = [
     {
+        id: DEFAULT_ERROR_CATEGORY_IDS.productErrors,
         name: "Product errors",
         matchers: { statuses: ["failed"] },
     },
     {
+        id: DEFAULT_ERROR_CATEGORY_IDS.testErrors,
         name: "Test errors",
         matchers: { statuses: ["broken"] },
     },
@@ -78295,6 +78581,28 @@ const DEFAULT_ERROR_CATEGORIES = [
 const isPlainObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const toRegExp = (v) => (v instanceof RegExp ? v : new RegExp(v));
 const isMatcherArray = (value) => Array.isArray(value);
+const hasControlChars = (value) => {
+    for (let index = 0; index < value.length; index++) {
+        const code = value.charCodeAt(index);
+        if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+            return true;
+        }
+    }
+    return false;
+};
+const normalizeCategoryId = (id) => {
+    if (typeof id !== "string") {
+        return { valid: false, reason: "id must be a string" };
+    }
+    const normalized = id.trim();
+    if (normalized.length === 0) {
+        return { valid: false, reason: "id must not be empty" };
+    }
+    if (hasControlChars(normalized)) {
+        return { valid: false, reason: "id must not contain control characters" };
+    }
+    return { valid: true, normalized };
+};
 const normalizeMatchers = (rule, index) => {
     const compatKeysUsed = rule.matchedStatuses !== undefined ||
         rule.messageRegex !== undefined ||
@@ -78348,6 +78656,7 @@ const normalizeCategoriesConfig = (cfg) => {
     const rules = rawRules.length ? rawRules : [];
     const normalized = [];
     const seen = new Map();
+    const sourceIdsByNormalizedId = new Map();
     const applyRule = (rule, index) => {
         if (!isPlainObject(rule)) {
             throw new Error(`categories[${index}] must be an object`);
@@ -78355,8 +78664,21 @@ const normalizeCategoriesConfig = (cfg) => {
         if (typeof rule.name !== "string" || !rule.name.trim()) {
             throw new Error(`categories[${index}].name must be non-empty string`);
         }
+        const defaultIdByName = new Map([
+            ["Product errors", DEFAULT_ERROR_CATEGORY_IDS.productErrors],
+            ["Test errors", DEFAULT_ERROR_CATEGORY_IDS.testErrors],
+        ]);
+        const effectiveId = rule.id ?? defaultIdByName.get(rule.name) ?? rule.name;
+        const idValidationResult = normalizeCategoryId(effectiveId);
+        if (!idValidationResult.valid) {
+            throw new Error(`categories[${index}].id ${idValidationResult.reason}`);
+        }
+        const normalizedId = idValidationResult.normalized;
+        const sourceIds = sourceIdsByNormalizedId.get(normalizedId) ?? new Set();
+        sourceIds.add(effectiveId);
+        sourceIdsByNormalizedId.set(normalizedId, sourceIds);
         const matchers = normalizeMatchers(rule, index);
-        const existing = seen.get(rule.name);
+        const existing = seen.get(normalizedId);
         if (existing) {
             existing.matchers.push(...matchers);
             return;
@@ -78381,6 +78703,7 @@ const normalizeCategoriesConfig = (cfg) => {
             }
         }
         const norm = {
+            id: normalizedId,
             name: rule.name,
             matchers,
             groupBy,
@@ -78390,11 +78713,19 @@ const normalizeCategoriesConfig = (cfg) => {
             hide: rule.hide ?? false,
             index,
         };
-        seen.set(rule.name, norm);
+        seen.set(normalizedId, norm);
         normalized.push(norm);
     };
     rules.forEach(applyRule);
     DEFAULT_ERROR_CATEGORIES.forEach((rule, index) => applyRule(rule, rules.length + index));
+    sourceIdsByNormalizedId.forEach((sourceIds, normalizedId) => {
+        if (sourceIds.size <= 1) {
+            return;
+        }
+        throw new Error(`categories: normalized id ${JSON.stringify(normalizedId)} is produced by source ids [${Array.from(sourceIds)
+            .map((id) => JSON.stringify(id))
+            .join(",")}]`);
+    });
     return normalized;
 };
 const matchObjectMatcher = (m, d) => {
@@ -78697,6 +79028,17 @@ const findLastByLabelName = (labels, name) => {
     }
     return undefined;
 };
+const shouldHideLabel = (labelName, matchers = []) => {
+    if (labelName.startsWith("_")) {
+        return true;
+    }
+    return matchers.some((matcher) => {
+        if (typeof matcher === "string") {
+            return matcher === labelName;
+        }
+        return new RegExp(matcher.source, matcher.flags).test(labelName);
+    });
+};
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/testplan.js
 
@@ -78730,40 +79072,194 @@ const getWorstStatus = (items) => {
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/environment.js
 const DEFAULT_ENVIRONMENT = "default";
-const matchEnvironment = (envConfig, tr) => {
-    return (Object.entries(envConfig).find(([, { matcher }]) => matcher({ labels: tr.labels }))?.[0] ?? DEFAULT_ENVIRONMENT);
+const MAX_ENVIRONMENT_NAME_LENGTH = 64;
+const MAX_ENVIRONMENT_ID_LENGTH = 64;
+const DEFAULT_ENVIRONMENT_IDENTITY = {
+    id: DEFAULT_ENVIRONMENT,
+    name: DEFAULT_ENVIRONMENT,
 };
+const environment_hasControlChars = (value) => {
+    for (let i = 0; i < value.length; i++) {
+        const code = value.charCodeAt(i);
+        if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+            return true;
+        }
+    }
+    return false;
+};
+const hasPathLikeSegments = (value) => {
+    if (value.includes("/") || value.includes("\\")) {
+        return true;
+    }
+    return value === "." || value === "..";
+};
+const validateEnvironmentName = (name) => {
+    if (typeof name !== "string") {
+        return { valid: false, reason: "name must be a string" };
+    }
+    const normalized = name.trim();
+    if (normalized.length === 0) {
+        return { valid: false, reason: "name must not be empty" };
+    }
+    if (normalized.length > MAX_ENVIRONMENT_NAME_LENGTH) {
+        return {
+            valid: false,
+            reason: `name must not exceed ${MAX_ENVIRONMENT_NAME_LENGTH} characters`,
+        };
+    }
+    if (environment_hasControlChars(normalized)) {
+        return { valid: false, reason: "name must not contain control characters" };
+    }
+    if (hasPathLikeSegments(normalized)) {
+        return { valid: false, reason: "name must not contain path-like segments" };
+    }
+    return { valid: true, normalized };
+};
+const validateEnvironmentId = (environmentId) => {
+    if (typeof environmentId !== "string") {
+        return { valid: false, reason: "id must be a string" };
+    }
+    const normalized = environmentId.trim();
+    if (normalized.length === 0) {
+        return { valid: false, reason: "id must not be empty" };
+    }
+    if (normalized.length > MAX_ENVIRONMENT_ID_LENGTH) {
+        return {
+            valid: false,
+            reason: `id must not exceed ${MAX_ENVIRONMENT_ID_LENGTH} characters`,
+        };
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(normalized)) {
+        return {
+            valid: false,
+            reason: "id must contain only latin letters, digits, underscores, and hyphens",
+        };
+    }
+    return { valid: true, normalized };
+};
+const assertValidEnvironmentName = (name, source = "environment name") => {
+    const validationResult = validateEnvironmentName(name);
+    if (!validationResult.valid) {
+        throw new Error(`Invalid ${source} ${JSON.stringify(name)}: ${validationResult.reason}`);
+    }
+    return validationResult.normalized;
+};
+const formatNormalizedEnvironmentCollision = (sourcePath, normalized, originalKeys) => `${sourcePath}: normalized key ${JSON.stringify(normalized)} is produced by original keys [${originalKeys.map((key) => JSON.stringify(key)).join(",")}]`;
 const getRealEnvsCount = (group) => {
     const { testResultsByEnv = {} } = group ?? {};
-    const envsCount = Object.keys(testResultsByEnv).length ?? 0;
+    const envsCount = Object.keys(testResultsByEnv).length;
     if (envsCount <= 1 && DEFAULT_ENVIRONMENT in testResultsByEnv) {
         return 0;
     }
     return envsCount;
 };
 
+// EXTERNAL MODULE: external "node:crypto"
+var external_node_crypto_ = __nccwpck_require__(7598);
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/history.js
+
+
+
+const md5 = (data) => (0,external_node_crypto_.createHash)("md5").update(data).digest("hex");
+const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+const normalizeHistoryTestResults = (testResults) => {
+    if (!isRecord(testResults)) {
+        return {};
+    }
+    return Object.fromEntries(Object.entries(testResults).filter(([, value]) => isRecord(value)));
+};
+const parametersCompare = (a, b) => {
+    return (a.name ?? "").localeCompare(b.name ?? "") || (a.value ?? "").localeCompare(b.value ?? "");
+};
+const stringifyHistoryParams = (parameters = []) => {
+    return [...parameters]
+        .filter((parameter) => !parameter?.excluded)
+        .sort(parametersCompare)
+        .map((parameter) => `${parameter.name}:${parameter.value}`)
+        .join(",");
+};
+const getFallbackHistoryId = (tr) => {
+    const fallbackTestCaseId = findLastByLabelName(tr.labels ?? [], fallbackTestCaseIdLabelName);
+    if (!fallbackTestCaseId) {
+        return undefined;
+    }
+    return `${fallbackTestCaseId}.${md5(stringifyHistoryParams(tr.parameters ?? []))}`;
+};
+const getHistoryIdCandidates = (tr) => {
+    const result = [];
+    if (tr.historyId) {
+        result.push(tr.historyId);
+    }
+    const fallbackHistoryId = getFallbackHistoryId(tr);
+    if (fallbackHistoryId && !result.includes(fallbackHistoryId)) {
+        result.push(fallbackHistoryId);
+    }
+    return result;
+};
+const filterUnknownByKnownIssues = (trs, knownIssueHistoryIds) => {
+    return trs.filter((tr) => {
+        const historyIdCandidates = getHistoryIdCandidates(tr);
+        if (historyIdCandidates.length === 0) {
+            return true;
+        }
+        return historyIdCandidates.every((historyId) => !knownIssueHistoryIds.has(historyId));
+    });
+};
+const normalizeHistoryDataPoint = (historyDataPoint) => ({
+    ...historyDataPoint,
+    knownTestCaseIds: Array.isArray(historyDataPoint.knownTestCaseIds) ? historyDataPoint.knownTestCaseIds : [],
+    testResults: normalizeHistoryTestResults(historyDataPoint.testResults),
+    metrics: isRecord(historyDataPoint.metrics) ? historyDataPoint.metrics : {},
+    url: historyDataPoint.url ?? "",
+});
+const normalizeHistoryDataPointUrls = (historyDataPoint) => {
+    const normalizedHistoryDataPoint = normalizeHistoryDataPoint(historyDataPoint);
+    const { url } = normalizedHistoryDataPoint;
+    if (!url) {
+        return normalizedHistoryDataPoint;
+    }
+    let testResults = normalizedHistoryDataPoint.testResults;
+    for (const [historyId, historyTestResult] of Object.entries(normalizedHistoryDataPoint.testResults)) {
+        if (historyTestResult.url) {
+            continue;
+        }
+        if (testResults === normalizedHistoryDataPoint.testResults) {
+            testResults = { ...normalizedHistoryDataPoint.testResults };
+        }
+        testResults[historyId] = {
+            ...historyTestResult,
+            url,
+        };
+    }
+    if (testResults === normalizedHistoryDataPoint.testResults) {
+        return normalizedHistoryDataPoint;
+    }
+    return {
+        ...normalizedHistoryDataPoint,
+        testResults,
+    };
+};
+const selectHistoryTestResults = (historyDataPoints, historyIdCandidates) => {
+    if (historyIdCandidates.length === 0) {
+        return [];
+    }
+    return historyDataPoints.reduce((acc, historyDataPoint) => {
+        for (const historyId of historyIdCandidates) {
+            const historyTestResult = historyDataPoint.testResults?.[historyId];
+            if (!historyTestResult) {
+                continue;
+            }
+            acc.push(historyTestResult);
+            break;
+        }
+        return acc;
+    }, []);
+};
 const htrsByTr = (hdps, tr) => {
     if (!tr?.historyId) {
         return [];
     }
-    return hdps.reduce((acc, dp) => {
-        const htr = dp.testResults[tr.historyId];
-        if (htr) {
-            if (dp.url) {
-                const url = new URL(dp.url);
-                url.hash = tr.id;
-                acc.push({
-                    ...htr,
-                    url: url.toString(),
-                });
-            }
-            else {
-                acc.push(htr);
-            }
-        }
-        return acc;
-    }, []);
+    return selectHistoryTestResults(hdps, [tr.historyId]);
 };
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/strings.js
@@ -78777,7 +79273,48 @@ const capitalize = (str) => {
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/dictionary.js
 const createDictionary = () => Object.create(null);
 
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/path.js
+const toPosixPath = (path) => path.replace(/\\/g, "/");
+const joinPosixPath = (...parts) => {
+    const segments = parts.map(toPosixPath).join("/").split("/");
+    const nonEmptySegments = [];
+    for (const segment of segments) {
+        if (segment.length > 0) {
+            nonEmptySegments.push(segment);
+        }
+    }
+    return nonEmptySegments.join("/");
+};
+
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/url.js
+const ALLOWED_EXTERNAL_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+const sanitizeExternalUrl = (value) => {
+    if (typeof value !== "string") {
+        return undefined;
+    }
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+        return undefined;
+    }
+    const schemeMatch = normalized.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+    if (!schemeMatch) {
+        return undefined;
+    }
+    const protocol = `${schemeMatch[1].toLowerCase()}:`;
+    if (!ALLOWED_EXTERNAL_URL_PROTOCOLS.has(protocol)) {
+        return undefined;
+    }
+    try {
+        return new URL(normalized).toString();
+    }
+    catch {
+        return undefined;
+    }
+};
+
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/index.js
+
+
 
 
 
