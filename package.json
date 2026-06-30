@@ -19,20 +19,29 @@
     "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
     "test": "allure run -- vitest run"
   },
+  "overrides": {
+    "ip-address": "10.1.1",
+    "brace-expansion": "5.0.6",
+    "dompurify": "3.4.11",
+    "form-data": "4.0.6",
+    "tar": "7.5.16",
+    "undici": "6.27.0",
+    "vite": "8.0.16"
+  },
   "dependencies": {
-    "@actions/core": "^2.0.1",
-    "@actions/github": "^6.0.1",
-    "@allurereport/core-api": "^3.8.2",
-    "@allurereport/plugin-api": "^3.8.2",
+    "@actions/core": "^3.0.1",
+    "@actions/github": "^9.1.1",
+    "@allurereport/core-api": "^3.13.1",
+    "@allurereport/plugin-api": "^3.13.1",
     "axios": "^1.15.0",
     "fast-glob": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "@vercel/ncc": "^0.38.4",
-    "allure": "^3.8.2",
-    "allure-vitest": "^3.8.0",
+    "@vercel/ncc": "^0.44.1",
+    "allure": "^3.13.1",
+    "allure-vitest": "^3.10.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.9"
   }
 }

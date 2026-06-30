@@ -23,6 +23,107 @@ import {
   upsertPullRequestComment,
 } from "./helpers.js";
 
+type ExternalCheckConclusion = "success" | "failure";
+
+type ExternalCheckSource = {
+  remoteHref?: string;
+  status: NonNullable<PluginSummary["checks"]>[number]["status"];
+  summaryId: string;
+  summaryName?: string;
+};
+
+type ExternalCheckRun = {
+  conclusion: ExternalCheckConclusion;
+  name: string;
+  sources: ExternalCheckSource[];
+};
+
+const isDebugModeEnabled = (input: string): boolean =>
+  ["1", "true", "yes", "on"].includes(input.trim().toLowerCase());
+
+const collectExternalCheckRuns = (summaries: EnrichedReportSummary[]): ExternalCheckRun[] => {
+  const checkRunMap = new Map<string, ExternalCheckRun>();
+
+  summaries.forEach((summary) => {
+    (summary.checks ?? []).forEach((check) => {
+      const conclusion: ExternalCheckConclusion = check.status === "passed" ? "success" : "failure";
+      const key = check.id?.trim() ?? "";
+      const existing = checkRunMap.get(key) ?? { name: check.name, conclusion, sources: [] };
+
+      if (existing.conclusion !== "failure" && conclusion === "failure") {
+        existing.conclusion = "failure";
+      }
+
+      existing.sources.push({
+        remoteHref: summary.remoteHref,
+        status: check.status,
+        summaryId: summary.summaryId,
+        summaryName: summary.name,
+      });
+
+      checkRunMap.set(key, existing);
+    });
+  });
+
+  return [...checkRunMap.values()];
+};
+
+const logDiagnosticInfo = (params: {
+  debugEnabled: boolean;
+  eventName: string;
+  headSha: string;
+  isPullRequest: boolean;
+  qualityGateFilePath: string;
+  qualityGateFileExists: boolean;
+  qualityGateParseError?: unknown;
+  staticRemoteHref?: string;
+  reportsDirectory: string;
+  externalCheckRuns: ExternalCheckRun[];
+  discoveredSummaryFiles: string[];
+  enrichedSummaries: EnrichedReportSummary[];
+}): void => {
+  if (!params.debugEnabled) return;
+
+  const checksCount = params.enrichedSummaries.reduce(
+    (acc, summary) => acc + (summary.checks?.length ?? 0),
+    0,
+  );
+  const summariesWithChecks = params.enrichedSummaries.filter(
+    (summary) => (summary.checks?.length ?? 0) > 0,
+  ).length;
+
+  core.info("[debug] Allure Action diagnostics");
+  core.info(`[debug] Event: ${params.eventName || "unknown"}`);
+  core.info(`[debug] Pull request event: ${params.isPullRequest}`);
+  core.info(`[debug] Head SHA: ${params.headSha}`);
+  core.info(`[debug] Report directory: ${params.reportsDirectory}`);
+  core.info(`[debug] Remote href: ${params.staticRemoteHref ?? "not provided"}`);
+  core.info(`[debug] Summary files found: ${params.discoveredSummaryFiles.length}`);
+  core.info(`[debug] Parsed summaries: ${params.enrichedSummaries.length}`);
+  core.info(`[debug] Summaries with checks: ${summariesWithChecks}`);
+  core.info(`[debug] Checks in summaries: ${checksCount}`);
+  core.info(`[debug] Unique checks to create: ${params.externalCheckRuns.length}`);
+  core.info(
+    `[debug] Unique check names: ${params.externalCheckRuns.map((run) => run.name).join(", ") || "none"}`,
+  );
+  core.info(`[debug] Quality gate file: ${params.qualityGateFilePath}`);
+  core.info(`[debug] Quality gate file exists: ${params.qualityGateFileExists}`);
+
+  if (params.qualityGateParseError) {
+    core.info(`[debug] Quality gate parse error: ${String(params.qualityGateParseError)}`);
+  }
+
+  if (!params.enrichedSummaries.length) return;
+
+  params.enrichedSummaries.forEach((summary) => {
+    const checkNames = (summary.checks ?? []).map((check) => check.name).join(", ") || "none";
+
+    core.info(
+      `[debug] Summary "${summary.summaryId}": name="${summary.name ?? "unknown"}", checks=${summary.checks?.length ?? 0}, checkNames=${checkNames}, remoteHref=${summary.remoteHref ?? "not provided"}`,
+    );
+  });
+};
+
 async function validateSubscription(): Promise<void> {
   const eventPath = process.env.GITHUB_EVENT_PATH
   let repoPrivate: boolean | undefined
@@ -69,29 +170,31 @@ async function validateSubscription(): Promise<void> {
     core.info('Timeout or API not reachable. Continuing to next step.')
   }
 }
+
 const executeAction = async (): Promise<void> => {
   await validateSubscription();
   const githubToken = retrieveActionInput("github-token");
   const workflowContext = fetchWorkflowContext();
-  const { eventName, repo, payload } = workflowContext;
+  const { eventName, repo, payload, sha } = workflowContext;
 
   if (!githubToken) {
     core.error("No GitHub token provided");
     return;
   }
 
-  if (eventName !== "pull_request" || !payload.pull_request) {
-    core.info("Not a pull request event, skipping");
-    return;
-  }
-
-  const reportsDirectory = retrieveActionInput("report-directory") || path.join(process.cwd(), "allure-report");
+  const pullRequest = payload?.pull_request;
+  const isPullRequest = eventName === "pull_request" && Boolean(pullRequest);
+  const headSha = pullRequest?.head?.sha ?? sha ?? "";
+  const reportsDirectory =
+    retrieveActionInput("report-directory") || path.posix.join(process.cwd(), "allure-report");
   const staticRemoteHref = retrieveActionInput("remote-href") || undefined;
   const enabledSections = parseEnabledSummarySections(retrieveActionInput("sections"));
-  const qualityGateFilePath = path.join(reportsDirectory, "quality-gate.json");
-  const discoveredSummaryFiles = await fg([path.join(reportsDirectory, "**", "summary.json")], {
-    onlyFiles: true,
-  });
+  const debugEnabled = isDebugModeEnabled(retrieveActionInput("debug"));
+  const qualityGateFilePath = path.posix.join(reportsDirectory, "quality-gate.json");
+  const discoveredSummaryFiles = await fg(
+    [path.posix.join(reportsDirectory, "**", "summary.json")],
+    { onlyFiles: true },
+  );
 
   const enrichedSummaries = (await Promise.all(
     discoveredSummaryFiles.map(async (filePath) => {
@@ -111,15 +214,35 @@ const executeAction = async (): Promise<void> => {
     }),
   )) as EnrichedReportSummary[];
 
+  const externalCheckRuns = collectExternalCheckRuns(enrichedSummaries);
   let qualityGateContent: QualityGateContent | undefined;
+  let qualityGateParseError: unknown;
+  const qualityGateFileExists = existsSync(qualityGateFilePath);
 
-  if (existsSync(qualityGateFilePath)) {
+  if (qualityGateFileExists) {
     const rawQualityGate = await fs.readFile(qualityGateFilePath, "utf-8");
 
     try {
       qualityGateContent = JSON.parse(rawQualityGate) as QualityGateContent;
-    } catch {}
+    } catch (error) {
+      qualityGateParseError = error;
+    }
   }
+
+  logDiagnosticInfo({
+    debugEnabled,
+    eventName,
+    headSha,
+    isPullRequest,
+    qualityGateFilePath,
+    qualityGateFileExists,
+    qualityGateParseError,
+    staticRemoteHref,
+    reportsDirectory,
+    externalCheckRuns,
+    discoveredSummaryFiles,
+    enrichedSummaries,
+  });
 
   const githubClient = initializeGitHubClient(githubToken);
 
@@ -127,11 +250,11 @@ const executeAction = async (): Promise<void> => {
     core.info("Quality gate results found, checking status");
     const failed = hasQualityGateFailures(qualityGateContent);
 
-    githubClient.rest.checks.create({
+    await githubClient.rest.checks.create({
       owner: repo.owner,
       repo: repo.repo,
       name: "Allure Quality Gate",
-      head_sha: payload.pull_request.head.sha,
+      head_sha: headSha,
       status: "completed",
       conclusion: !failed ? "success" : "failure",
       output: !failed
@@ -143,12 +266,42 @@ const executeAction = async (): Promise<void> => {
     });
   }
 
+  await Promise.all(
+    externalCheckRuns.map(async (checkRun) => {
+      if (debugEnabled) {
+        core.info(
+          `[debug] Creating check "${checkRun.name}" with conclusion "${checkRun.conclusion}" from ${checkRun.sources.length} source(s)`,
+        );
+      }
+
+      const response = await githubClient.rest.checks.create({
+        owner: repo.owner,
+        repo: repo.repo,
+        name: `Allure external check: ${checkRun.name}`,
+        head_sha: headSha,
+        status: "completed",
+        conclusion: checkRun.conclusion,
+      });
+
+      if (debugEnabled) {
+        core.info(
+          `[debug] Created check "${checkRun.name}": id=${response?.data?.id ?? "unknown"}, htmlUrl=${response?.data?.html_url ?? "not provided"}`,
+        );
+      }
+    }),
+  );
+
   if (!enrichedSummaries?.length) {
     core.info("No published reports found");
     return;
   }
 
-  const pullRequestNumber = payload.pull_request.number;
+  if (!isPullRequest || !pullRequest) {
+    core.info("Not a pull request event, skipping comments");
+    return;
+  }
+
+  const pullRequestNumber = pullRequest.number;
   const { data: existingComments } = await githubClient.rest.issues.listComments({
     owner: repo.owner,
     repo: repo.repo,

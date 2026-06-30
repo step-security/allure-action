@@ -51,6 +51,8 @@ type StoredComment = {
   body?: string | null;
 };
 
+const escapeMarkdownTablePipe = (value: string): string => value.split("|").join("\\|");
+
 const escapeHtmlValue = (input: string): string => {
   return input
     .replaceAll("&", "&amp;")
@@ -176,7 +178,7 @@ export const createReportMarkdownSummary = (reportSummaries: PluginSummary[]): s
 
     const pieChartUrl = `https://allurecharts.qameta.workers.dev/pie?passed=${testStatistics.passed}&failed=${testStatistics.failed}&broken=${testStatistics.broken}&skipped=${testStatistics.skipped}&unknown=${testStatistics.unknown}&size=32`;
     const pieChart = `<img src="${pieChartUrl}" width="28px" height="28px" />`;
-    const reportName = reportData?.name ?? "Allure Report";
+    const reportName = escapeMarkdownTablePipe(reportData?.name ?? "Allure Report");
     const totalDuration = formatDuration(reportData?.duration ?? 0);
 
     const generateStatusBadge = (type: string, count: number): string => {
@@ -326,7 +328,7 @@ export const resolvePerSummaryRemoteHref = (params: {
   if (!inputRemoteHref) return summaryRemoteHref;
 
   const summaryDir = path.dirname(summaryFilePath);
-  const indexHtmlPath = path.join(summaryDir, "index.html");
+  const indexHtmlPath = path.posix.join(summaryDir, "index.html");
 
   if (!existsSync(indexHtmlPath)) return inputRemoteHref;
 

@@ -62,27 +62,33 @@ describe("Allure Report Action Tests", () => {
       expect(fg).not.toHaveBeenCalled();
     });
 
-    it("exits early when event is not a pull request", async () => {
+    it("skips PR comments when event is not a pull request", async () => {
       (retrieveActionInput as unknown as Mock).mockReturnValue("foo");
       (fetchWorkflowContext as unknown as Mock).mockReturnValue({
         eventName: "push",
+        sha: "deadbeef",
       });
+      (fg as unknown as Mock).mockResolvedValue([]);
 
       await executeAction();
 
-      expect(fg).not.toHaveBeenCalled();
+      expect(fg).toHaveBeenCalled();
+      expect(octokitMock.rest.issues.createComment).not.toHaveBeenCalled();
     });
 
-    it("exits early when pull request payload is missing", async () => {
+    it("skips PR comments when pull request payload is missing", async () => {
       (retrieveActionInput as unknown as Mock).mockReturnValue("foo");
       (fetchWorkflowContext as unknown as Mock).mockReturnValue({
         eventName: "pull_request",
         payload: {},
+        sha: "deadbeef",
       });
+      (fg as unknown as Mock).mockResolvedValue([]);
 
       await executeAction();
 
-      expect(fg).not.toHaveBeenCalled();
+      expect(fg).toHaveBeenCalled();
+      expect(octokitMock.rest.issues.createComment).not.toHaveBeenCalled();
     });
   });
 
@@ -302,6 +308,106 @@ describe("Allure Report Action Tests", () => {
       expect(summaryOutput).not.toContain("\u001b[31m");
       expect(summaryOutput).not.toContain("\u001b[0m");
       expect(summaryOutput).toContain("Failed tests: 2 exceeds threshold of 0");
+    });
+  });
+
+  describe("External checks rendering", () => {
+    it("creates GitHub checks from checks[] in summary.json on non-PR events", async () => {
+      const mockSummary = {
+        name: "Test Suite",
+        stats: { passed: 10, failed: 0, broken: 0 },
+        duration: 5000,
+        newTests: [],
+        flakyTests: [],
+        retryTests: [],
+        checks: [
+          { id: "lint", name: "Lint", status: "passed" },
+          { id: "coverage", name: "Coverage", status: "failed" },
+        ],
+      };
+
+      (retrieveActionInput as unknown as Mock).mockImplementation((input: string) => {
+        if (input === "github-token") return "token";
+        if (input === "report-directory") return "test/fixtures/action";
+        return "";
+      });
+      (fetchWorkflowContext as unknown as Mock).mockReturnValue({
+        eventName: "push",
+        repo: { owner: "owner", repo: "repo" },
+        sha: "deadbeef",
+      });
+      (fg as unknown as Mock).mockResolvedValue(["test/fixtures/action/summary.json"]);
+      (fs.readFile as unknown as Mock).mockResolvedValueOnce(JSON.stringify(mockSummary));
+
+      await executeAction();
+
+      expect(octokitMock.rest.checks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Allure external check: Lint",
+          head_sha: "deadbeef",
+          status: "completed",
+          conclusion: "success",
+        }),
+      );
+      expect(octokitMock.rest.checks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Allure external check: Coverage",
+          head_sha: "deadbeef",
+          status: "completed",
+          conclusion: "failure",
+        }),
+      );
+      expect(octokitMock.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(core.info).toHaveBeenCalledWith("Not a pull request event, skipping comments");
+    });
+
+    it("aggregates conclusion to failure when any source for a check failed", async () => {
+      const summaryA = {
+        name: "Suite A",
+        stats: { passed: 5, failed: 0 },
+        duration: 1000,
+        newTests: [],
+        flakyTests: [],
+        retryTests: [],
+        checks: [{ id: "lint", name: "Lint", status: "passed" }],
+      };
+      const summaryB = {
+        name: "Suite B",
+        stats: { passed: 3, failed: 2 },
+        duration: 2000,
+        newTests: [],
+        flakyTests: [],
+        retryTests: [],
+        checks: [{ id: "lint", name: "Lint", status: "failed" }],
+      };
+
+      (retrieveActionInput as unknown as Mock).mockImplementation((input: string) => {
+        if (input === "github-token") return "token";
+        if (input === "report-directory") return "test/fixtures/action";
+        return "";
+      });
+      (fetchWorkflowContext as unknown as Mock).mockReturnValue({
+        eventName: "push",
+        repo: { owner: "owner", repo: "repo" },
+        sha: "abc000",
+      });
+      (fg as unknown as Mock).mockResolvedValue([
+        "test/fixtures/action/a/summary.json",
+        "test/fixtures/action/b/summary.json",
+      ]);
+      (fs.readFile as unknown as Mock)
+        .mockResolvedValueOnce(JSON.stringify(summaryA))
+        .mockResolvedValueOnce(JSON.stringify(summaryB));
+
+      await executeAction();
+
+      expect(octokitMock.rest.checks.create).toHaveBeenCalledTimes(1);
+      expect(octokitMock.rest.checks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Allure external check: Lint",
+          conclusion: "failure",
+        }),
+      );
     });
   });
 
