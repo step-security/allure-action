@@ -1,11 +1,11 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { formatDuration } from "@allurereport/core-api";
-import type { PluginSummary, QualityGateValidationResult, SummaryTestResult } from "@allurereport/plugin-api";
+import type { PluginSummary, QualityGateValidationResult, TestResultSummary } from "@allurereport/plugin-api";
 import * as path from "node:path";
 import { existsSync } from "node:fs";
 
-export type TestResultWithLink = SummaryTestResult & {
+export type TestResultWithLink = TestResultSummary & {
   remoteHref?: string;
 };
 
@@ -103,7 +103,7 @@ export const upsertPullRequestComment = async (config: {
   const { octokit, owner, repo, issue_number, marker, body, existingComments } = config;
   const fullCommentBody = `${marker}\n${body}`;
 
-  const commentsToInspect =
+  const commentsToInspect: StoredComment[] =
     existingComments ??
     (
       await octokit.rest.issues.listComments({
@@ -382,7 +382,7 @@ const collectSectionTestEntries = (
   section: SummarySectionKey,
 ): TestResultWithLink[] => {
   const definition = SECTION_CONFIGURATIONS[section];
-  const tests = summary[definition.testCollectionKey] ?? [];
+  const tests = (summary[definition.testCollectionKey] ?? []) as unknown as TestResultSummary[];
 
   return tests.map((test) => ({
     ...test,
