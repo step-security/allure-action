@@ -9730,7 +9730,7 @@ RedirectableRequest.prototype._sanitizeOptions = function (options) {
     }
   }
   // Ensure sensitive headers are always present
-  if (!isArray(options.sensitiveHeaders)) {
+  if (!Array.isArray(options.sensitiveHeaders)) {
     options.sensitiveHeaders = [];
   }
 
@@ -10106,10 +10106,6 @@ function isSubdomain(subdomain, domain) {
   assert(isString(subdomain) && isString(domain));
   var dot = subdomain.length - domain.length - 1;
   return dot > 0 && subdomain[dot] === "." && subdomain.endsWith(domain);
-}
-
-function isArray(value) {
-  return value instanceof Array;
 }
 
 function isString(value) {
@@ -44363,7 +44359,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.assembleSectionComments = exports.buildSectionCommentMarker = exports.parseEnabledSummarySections = exports.resolvePerSummaryRemoteHref = exports.deriveSummaryIdFromPath = exports.formatQualityGateBody = exports.hasQualityGateFailures = exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = exports.createReportMarkdownSummary = exports.removeStaleMarkerComments = exports.upsertPullRequestComment = exports.formatSingleTestEntry = exports.buildTestResultsList = exports.convertSeparatorsToForwardSlash = exports.buildExternalAnchor = exports.SECTION_COMMENT_MARKER_PREFIX = exports.SUPPORTED_SUMMARY_SECTIONS = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const core_api_1 = __nccwpck_require__(7535);
+const core_api_1 = __nccwpck_require__(419);
 const path = __importStar(__nccwpck_require__(6760));
 const node_fs_1 = __nccwpck_require__(3024);
 exports.SUPPORTED_SUMMARY_SECTIONS = ["new", "flaky", "retry"];
@@ -52583,7 +52579,7 @@ module.exports = axios;
 
 /***/ }),
 
-/***/ 7535:
+/***/ 419:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -52605,6 +52601,7 @@ __nccwpck_require__.d(__webpack_exports__, {
   STATUS_ORDER: () => (/* reexport */ STATUS_ORDER),
   StatusByPriority: () => (/* reexport */ StatusByPriority),
   TRANSITION_ORDER: () => (/* reexport */ TRANSITION_ORDER),
+  UNKNOWN_PARAMETER_VALUE: () => (/* reexport */ UNKNOWN_PARAMETER_VALUE),
   alphabetically: () => (/* reexport */ alphabetically),
   andThen: () => (/* reexport */ andThen),
   appLoaderFaviconDataUri: () => (/* reexport */ appLoaderFaviconDataUri),
@@ -52615,16 +52612,22 @@ __nccwpck_require__.d(__webpack_exports__, {
   byName: () => (/* reexport */ byName),
   byStatistic: () => (/* reexport */ byStatistic),
   byStatus: () => (/* reexport */ byStatus),
+  calculateEnvironmentHash: () => (/* reexport */ calculateEnvironmentHash),
+  calculateParametersHash: () => (/* reexport */ calculateParametersHash),
+  calculateRetryHash: () => (/* reexport */ calculateRetryHash),
+  calculateTestCaseHash: () => (/* reexport */ calculateTestCaseHash),
   capitalize: () => (/* reexport */ capitalize),
   compareBy: () => (/* reexport */ compareBy),
   compareChildNodes: () => (/* reexport */ compareChildNodes),
   compareNumbers: () => (/* reexport */ compareNumbers),
   compareStrings: () => (/* reexport */ compareStrings),
+  compareUtf8: () => (/* reexport */ compareUtf8),
   createAppLoaderMarkup: () => (/* reexport */ createAppLoaderMarkup),
   createBaseUrlScript: () => (/* reexport */ createBaseUrlScript),
   createDictionary: () => (/* reexport */ createDictionary),
   createFaviconLinkTag: () => (/* reexport */ createFaviconLinkTag),
   createFontLinkTag: () => (/* reexport */ createFontLinkTag),
+  createHistoryTestResultLookup: () => (/* reexport */ createHistoryTestResultLookup),
   createReportDataScript: () => (/* reexport */ createReportDataScript),
   createScriptTag: () => (/* reexport */ createScriptTag),
   createStylesLinkTag: () => (/* reexport */ createStylesLinkTag),
@@ -52635,26 +52638,31 @@ __nccwpck_require__.d(__webpack_exports__, {
   filterByStatus: () => (/* reexport */ filterByStatus),
   filterIncludedInSuccessRate: () => (/* reexport */ filterIncludedInSuccessRate),
   filterSuccessful: () => (/* reexport */ filterSuccessful),
-  filterUnknownByKnownIssues: () => (/* reexport */ filterUnknownByKnownIssues),
   filterUnsuccessful: () => (/* reexport */ filterUnsuccessful),
   findByLabelName: () => (/* reexport */ findByLabelName),
   findLastByLabelName: () => (/* reexport */ findLastByLabelName),
   formatDuration: () => (/* reexport */ formatDuration),
   formatNormalizedEnvironmentCollision: () => (/* reexport */ formatNormalizedEnvironmentCollision),
-  getFallbackHistoryId: () => (/* reexport */ getFallbackHistoryId),
   getGroupSortKey: () => (/* reexport */ getGroupSortKey),
-  getHistoryIdCandidates: () => (/* reexport */ getHistoryIdCandidates),
+  getMutedResolutionState: () => (/* reexport */ getMutedResolutionState),
   getRealEnvsCount: () => (/* reexport */ getRealEnvsCount),
+  getSuccessRate: () => (/* reexport */ getSuccessRate),
+  getSuccessRateTotal: () => (/* reexport */ getSuccessRateTotal),
+  getTestFlakiness: () => (/* reexport */ getTestFlakiness),
   getWorstStatus: () => (/* reexport */ getWorstStatus),
+  hasRetriesStatusChange: () => (/* reexport */ hasRetriesStatusChange),
   htrsByTr: () => (/* reexport */ htrsByTr),
   includedInSuccessRate: () => (/* reexport */ includedInSuccessRate),
   incrementStatistic: () => (/* reexport */ incrementStatistic),
+  injectReportDataScript: () => (/* reexport */ injectReportDataScript),
   isAttachment: () => (/* reexport */ isAttachment),
+  isIgnoredResolution: () => (/* reexport */ isIgnoredResolution),
   isMissingValue: () => (/* reexport */ isMissingValue),
   isStep: () => (/* reexport */ isStep),
   joinPosixPath: () => (/* reexport */ joinPosixPath),
   matchCategory: () => (/* reexport */ matchCategory),
   matchCategoryMatcher: () => (/* reexport */ matchCategoryMatcher),
+  md5Utf8: () => (/* reexport */ md5Utf8),
   mergeStatistic: () => (/* reexport */ mergeStatistic),
   normalizeCategoriesConfig: () => (/* reexport */ normalizeCategoriesConfig),
   normalizeHistoryDataPoint: () => (/* reexport */ normalizeHistoryDataPoint),
@@ -52664,7 +52672,11 @@ __nccwpck_require__.d(__webpack_exports__, {
   nullsFirst: () => (/* reexport */ nullsFirst),
   nullsLast: () => (/* reexport */ nullsLast),
   ordinal: () => (/* reexport */ ordinal),
+  parseIntegerConfigValue: () => (/* reexport */ parseIntegerConfigValue),
+  parseResolutionExpiresAt: () => (/* reexport */ parseResolutionExpiresAt),
   redactParameters: () => (/* reexport */ redactParameters),
+  reportDataScriptPlaceholder: () => (/* reexport */ reportDataScriptPlaceholder),
+  resolveMetricSamples: () => (/* reexport */ resolveMetricSamples),
   reverse: () => (/* reexport */ reverse),
   sanitizeExternalUrl: () => (/* reexport */ sanitizeExternalUrl),
   selectHistoryTestResults: () => (/* reexport */ selectHistoryTestResults),
@@ -52674,7 +52686,7 @@ __nccwpck_require__.d(__webpack_exports__, {
   statusToPriority: () => (/* reexport */ statusToPriority),
   statusesList: () => (/* reexport */ statusesList),
   stringifyForInlineScript: () => (/* reexport */ stringifyForInlineScript),
-  stringifyHistoryParams: () => (/* reexport */ stringifyHistoryParams),
+  stringifyIdentityParameters: () => (/* reexport */ stringifyIdentityParameters),
   successfulStatuses: () => (/* reexport */ successfulStatuses),
   toPosixPath: () => (/* reexport */ toPosixPath),
   unsuccessfulStatuses: () => (/* reexport */ unsuccessfulStatuses),
@@ -52732,6 +52744,87 @@ var GitProvider;
     GitProvider["Bitbucket"] = "bitbucket";
     GitProvider["Other"] = "other";
 })(GitProvider || (GitProvider = {}));
+
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/resolutions.js
+const parseResolutionExpiresAt = (value) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+    if (!match) {
+        return undefined;
+    }
+    const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue, offsetHour, offsetMinute] = match;
+    const year = Number(yearValue);
+    const month = Number(monthValue);
+    const day = Number(dayValue);
+    const hour = Number(hourValue);
+    const minute = Number(minuteValue);
+    const second = Number(secondValue);
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+    if (year <= 0 ||
+        daysInMonth === undefined ||
+        day < 1 ||
+        day > daysInMonth ||
+        hour > 23 ||
+        minute > 59 ||
+        second > 59 ||
+        (offsetHour !== undefined && (Number(offsetHour) > 23 || Number(offsetMinute) > 59))) {
+        return undefined;
+    }
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : undefined;
+};
+const getMutedResolutionState = (testResult, now = Date.now()) => {
+    if (testResult.resolution !== "muted") {
+        return undefined;
+    }
+    if (testResult.resolutionExpiresAt === undefined) {
+        return "permanent";
+    }
+    const expiresAt = parseResolutionExpiresAt(testResult.resolutionExpiresAt);
+    return expiresAt === undefined || now >= expiresAt ? "outdated" : "active";
+};
+const isIgnoredResolution = (testResult, now = Date.now()) => testResult.resolution === "accepted" ||
+    (testResult.resolution === "muted" && getMutedResolutionState(testResult, now) !== "outdated");
+
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/metrics.js
+const isValidMetricResult = (metric) => typeof metric.id === "string" &&
+    metric.id !== "" &&
+    typeof metric.key === "string" &&
+    metric.key !== "" &&
+    Number.isFinite(metric.start) &&
+    Number.isFinite(metric.stop);
+const resolveMetricSamples = (metrics, performance = {}) => {
+    const metricsConfig = performance.metrics ?? {};
+    const groupsConfig = performance.groups ?? {};
+    return metrics.reduce((acc, metric) => {
+        const value = Number.isFinite(metric.value) ? Number(metric.value) : undefined;
+        if (value === undefined || !isValidMetricResult(metric)) {
+            return acc;
+        }
+        const metricConfig = metricsConfig[metric.key];
+        const group = metricConfig?.group ?? metric.group;
+        const groupConfig = group ? groupsConfig[group] : undefined;
+        acc.push({
+            ...metric,
+            value,
+            ...(metricConfig?.title ? { title: metricConfig.title } : {}),
+            ...(metricConfig?.unit ? { unit: metricConfig.unit } : {}),
+            ...(group ? { group } : {}),
+            ...(groupConfig?.title ? { groupTitle: groupConfig.title } : {}),
+            ...(metricConfig?.better ? { better: metricConfig.better } : {}),
+        });
+        return acc;
+    }, []);
+};
+
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/config.js
+const parseIntegerConfigValue = (value, minValue) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return undefined;
+    }
+    const normalized = Math.floor(value);
+    return minValue === undefined || normalized >= minValue ? normalized : undefined;
+};
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/static.js
 const createScriptTag = (src, options) => {
@@ -52826,6 +52919,58 @@ const stringifyForInlineScript = (value) => {
         .replaceAll("\u2028", "\\u2028")
         .replaceAll("\u2029", "\\u2029");
 };
+const reportDataScriptPlaceholder = "<!-- allure-report-data -->";
+const createReportDataScriptChunks = (reportFiles = []) => {
+    if (!reportFiles.length) {
+        return [
+            Buffer.from(`
+      <script async>
+        window.allureReportDataReady = true;
+      </script>
+    `),
+        ];
+    }
+    const chunks = [
+        Buffer.from(`
+    <script async>
+      window.allureReportDataReady = false;
+      window.allureReportData = window.allureReportData || {};
+
+      function d(name, value){
+        return new Promise(function (resolve) {
+          window.allureReportData[name] = value;
+
+          return resolve(true);
+        });
+      }
+    </script>
+    <script defer>
+      Promise.allSettled([`),
+    ];
+    reportFiles.forEach(({ name, value }, index) => {
+        chunks.push(Buffer.from(`${index === 0 ? "" : ","}d(${stringifyForInlineScript(name)},${stringifyForInlineScript(value)})`));
+    });
+    chunks.push(Buffer.from(`])
+        .then(function(){
+          window.allureReportDataReady = true;
+        })
+    </script>
+  `));
+    return chunks;
+};
+const injectReportDataScript = (html, reportFiles = []) => {
+    const placeholderIndex = html.indexOf(reportDataScriptPlaceholder);
+    if (placeholderIndex === -1) {
+        throw new Error("Report data script placeholder is missing from the HTML template");
+    }
+    const prefix = html.slice(0, placeholderIndex);
+    const suffix = html.slice(placeholderIndex + reportDataScriptPlaceholder.length);
+    return Buffer.concat([
+        Buffer.from(prefix, "utf8"),
+        ...createReportDataScriptChunks(reportFiles),
+        Buffer.from(suffix, "utf8"),
+    ]);
+};
 const createReportDataScript = (reportFiles = []) => {
     if (!reportFiles?.length) {
         return `
@@ -52835,7 +52980,7 @@ const createReportDataScript = (reportFiles = []) => {
     `;
     }
     const reportFilesDeclaration = reportFiles
-        .map(({ name, value }) => `d(${JSON.stringify(name)},${JSON.stringify(value)})`)
+        .map(({ name, value }) => `d(${stringifyForInlineScript(name)},${stringifyForInlineScript(value)})`)
         .join(",");
     return `
     <script async>
@@ -53386,6 +53531,7 @@ const createTestPlan = (testResults) => {
 };
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/status.js
+const retryStatusChangeStatuses = new Set(["failed", "broken", "passed"]);
 const StatusByPriority = ["failed", "broken", "passed", "skipped", "unknown"];
 const statusToPriority = (status) => {
     if (!status) {
@@ -53398,6 +53544,16 @@ const getWorstStatus = (items) => {
         return;
     }
     return items.sort((a, b) => statusToPriority(a) - statusToPriority(b))[0];
+};
+const hasRetriesStatusChange = (current, retries) => retryStatusChangeStatuses.has(current.status) &&
+    retries.some(({ status }) => retryStatusChangeStatuses.has(status) && status !== current.status);
+
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/successRate.js
+
+const getSuccessRateTotal = (statistic) => Array.from(includedInSuccessRate).reduce((total, status) => total + (statistic[status] ?? 0), 0);
+const getSuccessRate = (statistic) => {
+    const total = getSuccessRateTotal(statistic);
+    return total > 0 ? (statistic.passed ?? 0) / total : 0;
 };
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/environment.js
@@ -53484,62 +53640,100 @@ const getRealEnvsCount = (group) => {
     return envsCount;
 };
 
-// EXTERNAL MODULE: external "node:crypto"
-var external_node_crypto_ = __nccwpck_require__(7598);
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/history.js
 
-
-
-const md5 = (data) => (0,external_node_crypto_.createHash)("md5").update(data).digest("hex");
 const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const normalizeHistoryTestResults = (testResults) => {
     if (!isRecord(testResults)) {
         return {};
     }
-    return Object.fromEntries(Object.entries(testResults).filter(([, value]) => isRecord(value)));
-};
-const parametersCompare = (a, b) => {
-    return (a.name ?? "").localeCompare(b.name ?? "") || (a.value ?? "").localeCompare(b.value ?? "");
-};
-const stringifyHistoryParams = (parameters = []) => {
-    return [...parameters]
-        .filter((parameter) => !parameter?.excluded)
-        .sort(parametersCompare)
-        .map((parameter) => `${parameter.name}:${parameter.value}`)
-        .join(",");
-};
-const getFallbackHistoryId = (tr) => {
-    const fallbackTestCaseId = findLastByLabelName(tr.labels ?? [], fallbackTestCaseIdLabelName);
-    if (!fallbackTestCaseId) {
-        return undefined;
-    }
-    return `${fallbackTestCaseId}.${md5(stringifyHistoryParams(tr.parameters ?? []))}`;
-};
-const getHistoryIdCandidates = (tr) => {
-    const result = [];
-    if (tr.historyId) {
-        result.push(tr.historyId);
-    }
-    const fallbackHistoryId = getFallbackHistoryId(tr);
-    if (fallbackHistoryId && !result.includes(fallbackHistoryId)) {
-        result.push(fallbackHistoryId);
-    }
-    return result;
-};
-const filterUnknownByKnownIssues = (trs, knownIssueHistoryIds) => {
-    return trs.filter((tr) => {
-        const historyIdCandidates = getHistoryIdCandidates(tr);
-        if (historyIdCandidates.length === 0) {
-            return true;
+    return Object.fromEntries(Object.entries(testResults).flatMap(([retryHash, value]) => {
+        if (!isRecord(value)) {
+            return [];
         }
-        return historyIdCandidates.every((historyId) => !knownIssueHistoryIds.has(historyId));
-    });
+        const historyTestResult = { ...value };
+        delete historyTestResult.historyId;
+        return [
+            [
+                retryHash,
+                {
+                    ...historyTestResult,
+                    retryHash,
+                },
+            ],
+        ];
+    }));
+};
+const normalizeHistoryMetrics = (metrics) => {
+    if (!isRecord(metrics)) {
+        return {};
+    }
+    return Object.fromEntries(Object.entries(metrics).filter(([, value]) => Number.isFinite(value)));
+};
+const isDefaultEnvironment = (result) => result.environment === undefined || result.environment === DEFAULT_ENVIRONMENT;
+const createHistoryTestResultLookup = (testResults) => {
+    const canonicalKeys = new Set();
+    const retryHashByLegacyHistoryId = new Map();
+    for (const result of testResults) {
+        if (!result.retryHash) {
+            continue;
+        }
+        canonicalKeys.add(result.retryHash);
+        const legacyId = "sourceMetadata" in result ? result.sourceMetadata?.legacyHistoryId : undefined;
+        if (!legacyId || !isDefaultEnvironment(result) || ("environmentHash" in result && result.environmentHash)) {
+            continue;
+        }
+        if (!retryHashByLegacyHistoryId.has(legacyId)) {
+            retryHashByLegacyHistoryId.set(legacyId, result.retryHash);
+        }
+        else if (retryHashByLegacyHistoryId.get(legacyId) !== result.retryHash) {
+            retryHashByLegacyHistoryId.set(legacyId, undefined);
+        }
+    }
+    for (const [legacyId, retryHash] of retryHashByLegacyHistoryId) {
+        if (retryHash === undefined || (canonicalKeys.has(legacyId) && legacyId !== retryHash)) {
+            retryHashByLegacyHistoryId.set(legacyId, undefined);
+        }
+    }
+    const legacyByCanonical = new Map();
+    for (const [legacyId, retryHash] of retryHashByLegacyHistoryId) {
+        if (!retryHash || legacyId === retryHash) {
+            continue;
+        }
+        legacyByCanonical.set(retryHash, legacyByCanonical.has(retryHash) ? undefined : legacyId);
+    }
+    return (point, result) => {
+        if (!result.retryHash) {
+            return undefined;
+        }
+        const historicalDefault = !("sourceMetadata" in result) && isDefaultEnvironment(result);
+        const retryHash = historicalDefault
+            ? (retryHashByLegacyHistoryId.get(result.retryHash) ?? result.retryHash)
+            : result.retryHash;
+        const canonical = Object.hasOwn(point.testResults ?? {}, retryHash) ? point.testResults?.[retryHash] : undefined;
+        if (canonical) {
+            return canonical;
+        }
+        const legacyId = "sourceMetadata" in result
+            ? result.sourceMetadata?.legacyHistoryId
+            : historicalDefault
+                ? legacyByCanonical.get(retryHash)
+                : undefined;
+        if (!legacyId ||
+            retryHashByLegacyHistoryId.get(legacyId) !== retryHash ||
+            !isDefaultEnvironment(result) ||
+            ("environmentHash" in result && result.environmentHash)) {
+            return undefined;
+        }
+        const legacy = Object.hasOwn(point.testResults ?? {}, legacyId) ? point.testResults?.[legacyId] : undefined;
+        return legacy && isDefaultEnvironment(legacy) ? legacy : undefined;
+    };
 };
 const normalizeHistoryDataPoint = (historyDataPoint) => ({
     ...historyDataPoint,
     knownTestCaseIds: Array.isArray(historyDataPoint.knownTestCaseIds) ? historyDataPoint.knownTestCaseIds : [],
     testResults: normalizeHistoryTestResults(historyDataPoint.testResults),
-    metrics: isRecord(historyDataPoint.metrics) ? historyDataPoint.metrics : {},
+    metrics: normalizeHistoryMetrics(historyDataPoint.metrics),
     url: historyDataPoint.url ?? "",
 });
 const normalizeHistoryDataPointUrls = (historyDataPoint) => {
@@ -53549,14 +53743,14 @@ const normalizeHistoryDataPointUrls = (historyDataPoint) => {
         return normalizedHistoryDataPoint;
     }
     let testResults = normalizedHistoryDataPoint.testResults;
-    for (const [historyId, historyTestResult] of Object.entries(normalizedHistoryDataPoint.testResults)) {
+    for (const [retryHash, historyTestResult] of Object.entries(normalizedHistoryDataPoint.testResults)) {
         if (historyTestResult.url) {
             continue;
         }
         if (testResults === normalizedHistoryDataPoint.testResults) {
             testResults = { ...normalizedHistoryDataPoint.testResults };
         }
-        testResults[historyId] = {
+        testResults[retryHash] = {
             ...historyTestResult,
             url,
         };
@@ -53569,13 +53763,13 @@ const normalizeHistoryDataPointUrls = (historyDataPoint) => {
         testResults,
     };
 };
-const selectHistoryTestResults = (historyDataPoints, historyIdCandidates) => {
-    if (historyIdCandidates.length === 0) {
+const selectHistoryTestResults = (historyDataPoints, retryHashes) => {
+    if (retryHashes.length === 0) {
         return [];
     }
     return historyDataPoints.reduce((acc, historyDataPoint) => {
-        for (const historyId of historyIdCandidates) {
-            const historyTestResult = historyDataPoint.testResults?.[historyId];
+        for (const retryHash of retryHashes) {
+            const historyTestResult = historyDataPoint.testResults?.[retryHash];
             if (!historyTestResult) {
                 continue;
             }
@@ -53586,10 +53780,111 @@ const selectHistoryTestResults = (historyDataPoints, historyIdCandidates) => {
     }, []);
 };
 const htrsByTr = (hdps, tr) => {
-    if (!tr?.historyId) {
-        return [];
+    const lookup = createHistoryTestResultLookup([tr]);
+    return hdps.flatMap((point) => {
+        const result = lookup(point, tr);
+        return result ? [result] : [];
+    });
+};
+
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/flaky.js
+const SIGNIFICANT_STATUSES = new Set(["passed", "failed", "broken"]);
+const getTestFlakiness = (current, history, options = {}) => {
+    const { historyDepth = 10, stabilizationPeriod = 5 } = options;
+    if (historyDepth === -1 || !SIGNIFICANT_STATUSES.has(current.status)) {
+        return undefined;
     }
-    return selectHistoryTestResults(hdps, [tr.historyId]);
+    const statuses = [];
+    for (const result of history) {
+        if (result === undefined) {
+            break;
+        }
+        if (result.id === current.id || !SIGNIFICANT_STATUSES.has(result.status)) {
+            continue;
+        }
+        statuses.push(result.status);
+        if (historyDepth > 0 && statuses.length === historyDepth) {
+            break;
+        }
+    }
+    if (statuses.length === 0) {
+        return undefined;
+    }
+    statuses.reverse();
+    statuses.push(current.status);
+    const period = historyDepth > 0 ? Math.min(stabilizationPeriod, historyDepth + 1) : stabilizationPeriod;
+    let anchor = 0;
+    let streak = 0;
+    for (let index = 0; index < statuses.length; index++) {
+        streak = index > 0 && statuses[index] === statuses[index - 1] ? streak + 1 : 1;
+        if (streak >= period) {
+            anchor = index;
+        }
+    }
+    let changes = 0;
+    for (let index = anchor + 1; index < statuses.length; index++) {
+        if (statuses[index] !== statuses[index - 1]) {
+            changes++;
+        }
+    }
+    if (changes <= 1) {
+        return false;
+    }
+    return !(changes === 2 && statuses[anchor] === "passed" && current.status === "passed");
+};
+
+// EXTERNAL MODULE: external "node:crypto"
+var external_node_crypto_ = __nccwpck_require__(7598);
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/identity.js
+
+
+const UNKNOWN_PARAMETER_VALUE = "#___unknown_value___#";
+const utf8Encoder = new TextEncoder();
+const compareUtf8 = (first, second) => {
+    const firstBytes = utf8Encoder.encode(first);
+    const secondBytes = utf8Encoder.encode(second);
+    const length = Math.min(firstBytes.length, secondBytes.length);
+    for (let index = 0; index < length; index++) {
+        const comparison = firstBytes[index] - secondBytes[index];
+        if (comparison !== 0) {
+            return comparison;
+        }
+    }
+    return firstBytes.length - secondBytes.length;
+};
+const md5Utf8 = (value) => (0,external_node_crypto_.createHash)("md5").update(value, "utf8").digest("hex");
+const calculateTestCaseHash = (testCaseId, fullName) => {
+    const identity = testCaseId?.length ? testCaseId : fullName?.length ? fullName : undefined;
+    return identity === undefined ? null : md5Utf8(identity);
+};
+const compareIdentityParameters = (first, second) => compareUtf8(first.name, second.name) || compareUtf8(first.value, second.value);
+const stringifyIdentityParameters = (parameters) => {
+    const normalized = [];
+    for (const parameter of parameters ?? []) {
+        if (parameter == null) {
+            continue;
+        }
+        const { name } = parameter;
+        if (typeof name !== "string" || name.length === 0 || parameter.excluded === true) {
+            continue;
+        }
+        normalized.push({
+            name,
+            value: parameter.value ?? UNKNOWN_PARAMETER_VALUE,
+        });
+    }
+    const unique = normalized
+        .sort(compareIdentityParameters)
+        .filter((parameter, index, all) => index === 0 || parameter.name !== all[index - 1].name || parameter.value !== all[index - 1].value);
+    return unique.map(({ name, value }) => `${name}:${value}`).join(",");
+};
+const calculateParametersHash = (parameters) => md5Utf8(stringifyIdentityParameters(parameters));
+const calculateEnvironmentHash = (namedEnvironmentId) => namedEnvironmentId == null || namedEnvironmentId === DEFAULT_ENVIRONMENT ? null : md5Utf8(namedEnvironmentId);
+const calculateRetryHash = ({ testCaseHash, parametersHash, environmentHash, }) => {
+    if (!testCaseHash) {
+        return null;
+    }
+    return environmentHash ? `${testCaseHash}.${parametersHash}.${environmentHash}` : `${testCaseHash}.${parametersHash}`;
 };
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/strings.js
@@ -53643,6 +53938,12 @@ const sanitizeExternalUrl = (value) => {
 };
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/index.js
+
+
+
+
+
+
 
 
 
