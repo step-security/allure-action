@@ -44359,7 +44359,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.assembleSectionComments = exports.buildSectionCommentMarker = exports.parseEnabledSummarySections = exports.resolvePerSummaryRemoteHref = exports.deriveSummaryIdFromPath = exports.formatQualityGateBody = exports.hasQualityGateFailures = exports.removeColorCodes = exports.initializeGitHubClient = exports.fetchWorkflowContext = exports.retrieveActionInput = exports.createReportMarkdownSummary = exports.removeStaleMarkerComments = exports.upsertPullRequestComment = exports.formatSingleTestEntry = exports.buildTestResultsList = exports.convertSeparatorsToForwardSlash = exports.buildExternalAnchor = exports.SECTION_COMMENT_MARKER_PREFIX = exports.SUPPORTED_SUMMARY_SECTIONS = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const core_api_1 = __nccwpck_require__(419);
+const core_api_1 = __nccwpck_require__(969);
 const path = __importStar(__nccwpck_require__(6760));
 const node_fs_1 = __nccwpck_require__(3024);
 exports.SUPPORTED_SUMMARY_SECTIONS = ["new", "flaky", "retry"];
@@ -52579,7 +52579,7 @@ module.exports = axios;
 
 /***/ }),
 
-/***/ 419:
+/***/ 969:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -52594,6 +52594,7 @@ __nccwpck_require__.d(__webpack_exports__, {
   DEFAULT_ERROR_CATEGORIES: () => (/* reexport */ DEFAULT_ERROR_CATEGORIES),
   DEFAULT_ERROR_CATEGORY_IDS: () => (/* reexport */ DEFAULT_ERROR_CATEGORY_IDS),
   EMPTY_VALUE: () => (/* reexport */ EMPTY_VALUE),
+  ExpressionError: () => (/* reexport */ ExpressionError),
   GitProvider: () => (/* reexport */ GitProvider),
   MAX_ENVIRONMENT_ID_LENGTH: () => (/* reexport */ MAX_ENVIRONMENT_ID_LENGTH),
   MAX_ENVIRONMENT_NAME_LENGTH: () => (/* reexport */ MAX_ENVIRONMENT_NAME_LENGTH),
@@ -52602,6 +52603,8 @@ __nccwpck_require__.d(__webpack_exports__, {
   StatusByPriority: () => (/* reexport */ StatusByPriority),
   TRANSITION_ORDER: () => (/* reexport */ TRANSITION_ORDER),
   UNKNOWN_PARAMETER_VALUE: () => (/* reexport */ UNKNOWN_PARAMETER_VALUE),
+  UNRESOLVED_ENVIRONMENT: () => (/* reexport */ UNRESOLVED_ENVIRONMENT),
+  UNRESOLVED_ENVIRONMENT_IDENTITY: () => (/* reexport */ UNRESOLVED_ENVIRONMENT_IDENTITY),
   alphabetically: () => (/* reexport */ alphabetically),
   andThen: () => (/* reexport */ andThen),
   appLoaderFaviconDataUri: () => (/* reexport */ appLoaderFaviconDataUri),
@@ -52609,6 +52612,7 @@ __nccwpck_require__.d(__webpack_exports__, {
   appLoaderStyles: () => (/* reexport */ appLoaderStyles),
   assertValidEnvironmentName: () => (/* reexport */ assertValidEnvironmentName),
   buildEnvironmentSortOrder: () => (/* reexport */ buildEnvironmentSortOrder),
+  buildMetricHierarchy: () => (/* reexport */ buildMetricHierarchy),
   byName: () => (/* reexport */ byName),
   byStatistic: () => (/* reexport */ byStatistic),
   byStatus: () => (/* reexport */ byStatus),
@@ -52691,7 +52695,8 @@ __nccwpck_require__.d(__webpack_exports__, {
   toPosixPath: () => (/* reexport */ toPosixPath),
   unsuccessfulStatuses: () => (/* reexport */ unsuccessfulStatuses),
   validateEnvironmentId: () => (/* reexport */ validateEnvironmentId),
-  validateEnvironmentName: () => (/* reexport */ validateEnvironmentName)
+  validateEnvironmentName: () => (/* reexport */ validateEnvironmentName),
+  validatePerformanceConfig: () => (/* reexport */ validatePerformanceConfig)
 });
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/constants.js
@@ -52787,6 +52792,49 @@ const isIgnoredResolution = (testResult, now = Date.now()) => testResult.resolut
     (testResult.resolution === "muted" && getMutedResolutionState(testResult, now) !== "outdated");
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/metrics.js
+const buildMetricHierarchy = (performance = {}) => {
+    const definitions = performance.metrics ?? {};
+    const metrics = Object.keys(definitions)
+        .sort()
+        .map((key) => ({ key, parent: definitions[key]?.parent }));
+    for (const { key, parent } of metrics) {
+        if (parent === undefined)
+            continue;
+        if (typeof parent !== "string" || parent.length === 0) {
+            throw new Error(`performance.metrics[${JSON.stringify(key)}].parent must be a non-empty metric key`);
+        }
+        if (parent === key) {
+            throw new Error(`Performance metric ${JSON.stringify(key)} cannot be its own parent`);
+        }
+        if (!Object.hasOwn(definitions, parent)) {
+            throw new Error(`Unknown parent ${JSON.stringify(parent)} for performance metric ${JSON.stringify(key)}`);
+        }
+    }
+    const nodes = new Map(metrics.map(({ key }) => [key, { key, children: [] }]));
+    const roots = [];
+    for (const { key, parent } of metrics) {
+        const node = nodes.get(key);
+        const parentNode = parent === undefined ? undefined : nodes.get(parent);
+        if (parentNode)
+            parentNode.children.push(node);
+        else
+            roots.push(node);
+    }
+    const reachable = [...roots];
+    for (const node of reachable) {
+        for (const child of node.children)
+            reachable.push(child);
+    }
+    if (reachable.length !== nodes.size) {
+        const visited = new Set(reachable.map(({ key }) => key));
+        const cyclic = [...nodes.keys()].filter((key) => !visited.has(key));
+        throw new Error(`Cyclic performance metric parents: ${cyclic.map((key) => JSON.stringify(key)).join(", ")}`);
+    }
+    return roots;
+};
+const validatePerformanceConfig = (performance = {}) => {
+    buildMetricHierarchy(performance);
+};
 const isValidMetricResult = (metric) => typeof metric.id === "string" &&
     metric.id !== "" &&
     typeof metric.key === "string" &&
@@ -52801,9 +52849,9 @@ const resolveMetricSamples = (metrics, performance = {}) => {
         if (value === undefined || !isValidMetricResult(metric)) {
             return acc;
         }
-        const metricConfig = metricsConfig[metric.key];
+        const metricConfig = Object.hasOwn(metricsConfig, metric.key) ? metricsConfig[metric.key] : undefined;
         const group = metricConfig?.group ?? metric.group;
-        const groupConfig = group ? groupsConfig[group] : undefined;
+        const groupConfig = group && Object.hasOwn(groupsConfig, group) ? groupsConfig[group] : undefined;
         acc.push({
             ...metric,
             value,
@@ -52901,8 +52949,9 @@ const createAppLoaderMarkup = () => {
 const createBaseUrlScript = () => {
     return `
     <script>
-      const { origin, pathname } = window.location; 
-      const url = new URL(pathname, origin);
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
       const baseEl = document.createElement("base");
       
       baseEl.href = url.toString();
@@ -53480,6 +53529,14 @@ const byName = () => nullsLast(compareBy("name", alphabetically()));
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/predicate.js
 const notNull = (value) => !!value;
 
+;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/errors.js
+class ExpressionError extends Error {
+    constructor() {
+        super(...arguments);
+        this.name = "ExpressionError";
+    }
+}
+
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/label.js
 const findByLabelName = (labels, name) => {
     return labels.find((label) => label.name === name)?.value;
@@ -53497,6 +53554,9 @@ const shouldHideLabel = (labelName, matchers = []) => {
         return true;
     }
     return matchers.some((matcher) => {
+        if (typeof matcher === "function") {
+            return matcher(labelName);
+        }
         if (typeof matcher === "string") {
             return matcher === labelName;
         }
@@ -53558,6 +53618,11 @@ const getSuccessRate = (statistic) => {
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/utils/environment.js
 const DEFAULT_ENVIRONMENT = "default";
+const UNRESOLVED_ENVIRONMENT = "unresolved";
+const UNRESOLVED_ENVIRONMENT_IDENTITY = {
+    id: UNRESOLVED_ENVIRONMENT,
+    name: "Unresolved",
+};
 const MAX_ENVIRONMENT_NAME_LENGTH = 64;
 const MAX_ENVIRONMENT_ID_LENGTH = 64;
 const DEFAULT_ENVIRONMENT_IDENTITY = {
@@ -53938,6 +54003,7 @@ const sanitizeExternalUrl = (value) => {
 };
 
 ;// CONCATENATED MODULE: ./node_modules/@allurereport/core-api/dist/index.js
+
 
 
 
